@@ -112,6 +112,7 @@ def glob2(pattern):
   else:
     root = os.path.dirname(pattern[:min(indices)]) or '.'
 
+  pattern = pattern.replace('\\', '/')
   pattern = pattern.replace('/', os.path.sep)
   pattern = re.escape(pattern)
   pattern = pattern.replace('\\*\\*', '.*?')
