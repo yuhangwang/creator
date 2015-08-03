@@ -63,15 +63,30 @@ class Workspace(object):
     # If the current user has a `.creator_profile` file in his
     # home directory, run that file.
     filename = os.path.join(os.path.expanduser('~'), '.creator_profile')
-    filename = creator.utils.normpath(filename)
     if os.path.isfile(filename):
-      unit = Unit(os.path.dirname(filename), 'static|' + filename, self)
-      self.statics[filename] = unit
-      try:
-        unit.run_unit_script(filename)
-      except Exception:
-        del self.statics[filename]
-        raise
+      self.run_static_unit(filename)
+
+  def run_static_unit(self, filename):
+    """
+    Executes the unit under the specified filename and returns it.
+    The unit will not be re-run if it was already run.
+    Args:
+      filename (str): The filename of the unit to execute.
+    Returns:
+      Unit: The unit executed.
+    """
+
+    filename = creator.utils.normpath(filename)
+    if filename in self.statics:
+      return self.statics[filename]
+
+    unit = Unit(os.path.dirname(filename), 'static|' + filename, self)
+    self.statics[filename] = unit
+    try:
+      unit.run_unit_script(filename)
+    except Exception:
+      del self.statics[filename]
+      raise
 
   def get_unit(self, identifier):
     """
@@ -130,6 +145,14 @@ class Workspace(object):
 
     filename = self.find_unit(identifier)
     filename = os.path.abspath(filename)
+
+    # Execute the .creator_profile file in the current directory.
+    dirname = os.path.dirname(filename)
+    profile = os.path.join(dirname, '.creator_profile')
+    if os.path.isfile(profile):
+      self.run_static_unit(profile)
+
+    # Run the unit that we found.
     unit = Unit(os.path.dirname(filename), identifier, self)
     self.units[identifier] = unit
     try:
