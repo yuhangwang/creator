@@ -91,16 +91,18 @@ creator: running task 'hello_world:run'
 Hello, World!
 ```
 
-See also: [*creator-build/hello_world_cpp*](https://github.com/creator-build/hello_world_cpp)
+See also: [*creator-build/hello_world.cpp*](https://github.com/creator-build/hello_world.cpp)
 
 __Requirements__
 
 - Python 3
 - [setuptools][]
-- [ninja][]
+- [glob2][]
 - [colorama][] (optional)
+- [ninja][]
 
 [setuptools]: https://pypi.python.org/pypi/setuptools
-[ninja]: https://github.com/martine/ninja
+[glob2]: https://pypi.python.org/pypi/glob2
 [colorama]: https://pypi.python.org/pypi/colorama
+[ninja]: https://github.com/martine/ninja
 [Wiki]: https://github.com/creator-build/creator/wiki

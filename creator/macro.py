@@ -20,7 +20,7 @@
 
 import creator.utils
 import abc
-import glob
+import glob2
 import os
 import string
 import sys
@@ -648,7 +648,7 @@ class Globals:
     patterns = [n.eval(context, []).strip() for n in args]
     items = []
     for pattern in patterns:
-      items.extend(creator.utils.glob2(pattern))
+      items.extend(glob2.glob(pattern))
     items.sort()
     return creator.utils.join(items)
 

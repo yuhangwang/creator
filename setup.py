@@ -42,6 +42,7 @@ setuptools.setup(
     'creator': ['builtins/*.crunit']
     },
   scripts=['scripts/creator'],
+  install_requires=['glob2', 'colorama'],
   classifiers=[
     "Development Status :: 5 - Production/Stable",
     "Programming Language :: Python",
