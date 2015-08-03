@@ -20,16 +20,22 @@
 # THE SOFTWARE.
 
 import glob
+import os
 import setuptools
 import sys
 
 if sys.version_info[0] != 3:
   raise EnvironmentError('Creator requires Python 3')
 
+if os.name == 'nt':
+  scripts = ['scripts/creator.py']
+else:
+  scripts = ['scripts/creator']
+
 long_description = ''
 setuptools.setup(
   name='creator-build',
-  version='0.0.3',
+  version='0.0.4-dev',
   description='Meta Build System for Ninja',
   long_description=long_description,
   author='Niklas Rosenstein',
@@ -40,7 +46,7 @@ setuptools.setup(
   package_data={
     'creator': ['builtins/*.crunit']
     },
-  scripts=['scripts/creator'],
+  scripts=scripts,
   install_requires=['glob2==0.4.1', 'colorama==0.3.1'],
   classifiers=[
     "Development Status :: 5 - Production/Stable",

@@ -19,7 +19,26 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+import os
 import sys
+
+if hasattr(os.path, 'samefile'):
+  samefile = os.path.samefile
+else:
+  def samefile(fn1, fn2):
+    if os.path.isfile(fn1) and os.path.isfile(fn2):
+      return os.stat(fn1) == os.stat(fn2)
+    else:
+      return False
+
+# Remove all paths that contain exactly this file. It would import itself
+# instead of the creator module.
+basename = os.path.basename(__file__)
+for path in sys.path[:]:
+  ref_file = os.path.join(path, basename)
+  if os.path.isfile(ref_file) and samefile(ref_file, __file__):
+    sys.path.remove(path)
+
 import creator.__main__
 if __name__ == "__main__":
   sys.exit(creator.__main__.main())
