@@ -91,7 +91,7 @@ def complete_target_list(targets, for_target=None):
     for target in targets[:]:
       complete_target_list(targets, target)
   else:
-    for dep in for_target.dependencies:
+    for dep in reversed(for_target.dependencies):
       if dep in targets:
         targets.remove(dep)
       targets.insert(0, dep)
