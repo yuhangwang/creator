@@ -83,6 +83,18 @@ def call_subprocess(args):
   return subprocess.call(args)
 
 
+def enroll_target_dependencies(targets, for_target=None):
+  if for_target is None:
+    for target in targets[:]:
+      enroll_target_dependencies(targets, target)
+  else:
+    for dep in for_target.dependencies:
+      if dep in targets:
+        targets.remove(dep)
+      targets.insert(0, dep)
+      enroll_target_dependencies(targets, dep)
+
+
 def main(argv=None):
   if argv is None:
     argv = sys.argv[1:]
@@ -142,6 +154,9 @@ def main(argv=None):
   # Collect a list of all targets and tasks.
   targets = [unit.get_target(x) for x in args.targets]
   defaults = [t.identifier for t in targets if isinstance(t, creator.unit.Target)]
+
+  # Make sure all dependencies are queued as well.
+  enroll_target_dependencies(targets)
 
   if args.export:
     # Print a warning for each specified non-buildable target.

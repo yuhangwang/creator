@@ -169,7 +169,7 @@ class Workspace(object):
 
     for unit in self.units.values():
       for target in unit.targets.values():
-        if isinstance(target, Target) and not target.is_setup:
+        if not target.is_setup:
           target.do_setup()
 
 
@@ -499,38 +499,159 @@ class Unit(object):
       command = shlex.split(command)
     return creator.utils.Response(command, shell=shell)
 
-  def target(self, func):
+  def target(self, *requirements):
     """
-    Wraps a Python function and returns a :class:`Target` object that
-    will be filled by the wrapped function on :meth:`Target.do_setup`.
-    Targets are set-up after all units are loaded and not immediately
-    when the function is wrapped.
-    """
+    Wraps a Python function to be treated as a target to declare the
+    build definitions. _\*requirements_ must be passed zero or more
+    requirements that are to be built before the actual target is.
 
-    if not callable(func):
-      raise TypeError('func must be callable', type(func))
-    if func.__name__ in self.targets:
-      raise ValueError('target "{0}" already exists'.format(func.__name__))
-    target = Target(self, func.__name__, func, False)
-    self.targets[func.__name__] = target
-    return target
+    Requirements for targets may only be targets, not tasks.
 
-  def task(self, func):
-    """
-    Decorator for Python functions which can be invoked from the Creator
-    command-line as tasks. The name of the function is used as task name.
-    The task is internally registered in the :attr:`targets` dictionary.
+    Returns:
+      callable: A decorator for a function that returns a :class:`Target`.
     """
 
-    if not callable(func):
-      raise TypeError('func must be callable', type(func))
-    if func.__name__ in self.targets:
-      raise ValueError('task name already reserved', func.__name__)
-    self.targets[func.__name__] = Task(self, func.__name__, func)
-    return func
+    for item in requirements:
+      if not isinstance(item, str) and not isinstance(item, BaseTarget):
+        raise TypeError('requirement must be str or BaseTarget', type(item))
+
+    def decorator(func):
+      if not callable(func):
+        raise TypeError('func must be callable', type(func))
+      if func.__name__ in self.targets:
+        raise ValueError('target "{0}" already exists'.format(func.__name__))
+      def on_setup(*args, **kwargs):
+        [target.requires(req) for req in requirements]
+        func(*args, **kwargs)
+      target = Target(self, func.__name__, on_setup, False)
+      self.targets[func.__name__] = target
+      return target
+
+    return decorator
+
+  def task(self, *requirements):
+    """
+    Wraps a Python function as a task which can be invoked by the
+    command-line or required by another task. _\*requirements_ must be
+    passed zero or more requirements to be built/executed before the
+    actual task is executed.
+
+    Requirements may be targets or tasks.
+
+    Returns:
+      callable: A decorator for a function that returns a :class:`Task`.
+    """
+
+    for item in requirements:
+      if not isinstance(item, str) and not isinstance(item, BaseTarget):
+        raise TypeError('requirement must be str or BaseTarget', type(item))
+
+    def decorator(func):
+      if not callable(func):
+        raise TypeError('func must be callable', type(func))
+      if func.__name__ in self.targets:
+        raise ValueError('task name already reserved', func.__name__)
+      def on_setup(*args, **kwargs):
+        [task.requires(req) for req in requirements]
+      task = Task(func, self, func.__name__, on_setup)
+      self.targets[func.__name__] = task
+      return func
+
+    return decorator
 
 
-class Target(object):
+class BaseTarget(object):
+
+  def __init__(self, unit, name, on_setup=None, pass_self=True, args=(), kwargs=None):
+    if not isinstance(unit, creator.unit.Unit):
+      raise TypeError('unit must be creator.unit.Unit', type(unit))
+    if not isinstance(name, str):
+      raise TypeError('name must be str', type(name))
+    if not creator.utils.validate_identifier(name):
+      raise ValueError('name is not a valid identifier', name)
+    if on_setup is not None and not callable(on_setup):
+      raise TypeError('on_setup must be None or callable')
+    super().__init__()
+    self._unit = weakref.ref(unit)
+    self._name = name
+    self.dependencies = []
+    self.listeners = []
+    self.is_setup = False
+    self.on_setup = on_setup
+    self.pass_self = pass_self
+    self.args = args
+    self.kwargs = kwargs or {}
+
+  @property
+  def unit(self):
+    return self._unit()
+
+  @property
+  def name(self):
+    return self._name
+
+  @property
+  def identifier(self):
+    return self._unit().identifier + ':' + self._name
+
+  def acccept_requirement(self, target):
+    """
+    Called when a requirement is added via :meth:`requires` to ensure
+    that the requirement can be accepted by the target.
+    """
+
+    return
+
+  def requires(self, target):
+    """
+    Adds *target* as a dependency for this target. If the *target* is
+    not already set-up, it will be by this function.
+
+    Args:
+      target (str or Target): The target to build before the other.
+        If a string is passed, the target name is resolved in the
+        workspace.
+    """
+
+    if isinstance(target, str):
+      namespace, target = creator.utils.parse_var(target)
+      if not namespace:
+        namespace = self.unit.identifier
+      target = self.unit.workspace.get_unit(namespace).get_target(target)
+    elif not isinstance(target, Target):
+      raise TypeError('target must be Target object', type(target))
+    self.acccept_requirement(target)
+    if not target.is_setup:
+      target.do_setup()
+    self.dependencies.append(target)
+
+  def do_setup(self):
+    """
+    Set up the targets internal data or dependencies. Call the parent
+    method after successful exit to set :attr:`is_setup` to True. Raise
+    an exception if something fails.
+
+    Raises:
+      RuntimeError: If the target is already set-up.
+    """
+
+    if self.is_setup:
+      raise RuntimeError('target "{0}" is already set-up'.format(self.identifier))
+
+    for listener in self.listeners:
+      listener(self, 'do_setup', None)
+
+    if self.on_setup is not None:
+      if self.pass_self:
+        self.on_setup(self, *self.args, **self.kwargs)
+      else:
+        self.on_setup(*self.args, **self.kwargs)
+
+    self.is_setup = True
+    return True
+
+
+class Target(BaseTarget):
   """
   This class represents one or multiple build targets under one common
   identifier. It contains all the information necessary to generate the
@@ -577,87 +698,13 @@ class Target(object):
         dependencies.
   """
 
-  def __init__(
-      self, unit, name, on_setup=None, pass_self=True,
-      args=(), kwargs=None):
-    if not isinstance(unit, creator.unit.Unit):
-      raise TypeError('unit must be creator.unit.Unit', type(unit))
-    if not isinstance(name, str):
-      raise TypeError('name must be str', type(name))
-    if not creator.utils.validate_identifier(name):
-      raise ValueError('name is not a valid identifier', name)
-    if on_setup is not None and not callable(on_setup):
-      raise TypeError('on_setup must be None or callable')
-    super().__init__()
-    self._unit = weakref.ref(unit)
-    self._name = name
-    self.is_setup = False
-    self.dependencies = []
-    self.on_setup = on_setup
-    self.pass_self = pass_self
-    self.args = args
-    self.kwargs = kwargs or {}
+  def __init__(self, *args, **kwargs):
+    super().__init__(*args, **kwargs)
     self.command_data = []
-    self.listeners = []
 
-  @property
-  def unit(self):
-    return self._unit()
-
-  @property
-  def name(self):
-    return self._name
-
-  @property
-  def identifier(self):
-    return self._unit().identifier + ':' + self._name
-
-  def do_setup(self):
-    """
-    Set up the targets internal data or dependencies. Call the parent
-    method after successful exit to set :attr:`is_setup` to True. Raise
-    an exception if something fails.
-
-    Raises:
-      RuntimeError: If the target is already set-up.
-    """
-
-    if self.is_setup:
-      raise RuntimeError('target "{0}" is already set-up'.format(self.identifier))
-
-    for listener in self.listeners:
-      listener(self, 'do_setup', None)
-
-    if self.on_setup is not None:
-      if self.pass_self:
-        self.on_setup(self, *self.args, **self.kwargs)
-      else:
-        self.on_setup(*self.args, **self.kwargs)
-
-    self.is_setup = True
-    return True
-
-  def requires(self, target):
-    """
-    Adds *target* as a dependency for this target. If the *target* is
-    not already set-up, it will be by this function.
-
-    Args:
-      target (str or Target): The target to build before the other.
-        If a string is passed, the target name is resolved in the
-        workspace.
-    """
-
-    if isinstance(target, str):
-      namespace, target = creator.utils.parse_var(target)
-      if not namespace:
-        namespace = self.unit.identifier
-      target = self.unit.workspace.get_unit(namespace).get_target(target)
-    elif not isinstance(target, Target):
-      raise TypeError('target must be Target object', type(target))
-    if not target.is_setup:
-      target.do_setup()
-    self.dependencies.append(target)
+  def acccept_requirement(self, target):
+    if not isinstance(target, Target):
+      raise TypeError('can only depend on targets')
 
   def add(self, *args, **kwargs):
     warnings.warn("Target.add() is deprecated, use "
@@ -785,42 +832,20 @@ class Target(object):
     writer.build(creator.ninja.ident(self.identifier), 'phony', phonies)
 
 
-class Task(object):
+class Task(BaseTarget):
   """
   Represents a task-target that is run from Python.
   """
 
-  def __init__(self, unit, name, func):
-    if not isinstance(unit, Unit):
-      raise TypeError('unit must be Unit', type(unit))
-    if not isinstance(name, str):
-      raise TypeError('name must be str', type(name))
-    if not callable(func):
-      raise TypeError('func must be callable', type(func))
-    super().__init__()
-    self._unit = weakref.ref(unit)
-    self._name = name
-    self._func = func
-
-  @property
-  def name(self):
-    return self._name
-
-  @property
-  def identifier(self):
-    return creator.utils.create_var(self.unit.identifier, self.name)
+  def __init__(self, task_func, *args, **kwargs):
+    if not callable(task_func):
+      raise TypeError('task_func must be callable', type(task_func))
+    super().__init__(*args, **kwargs)
+    self._func = task_func
 
   @property
   def func(self):
     return self._func
-
-  @property
-  def unit(self):
-    return self._unit()
-
-  @property
-  def workspace(self):
-    return self.unit.workspace
 
 
 class WorkspaceContext(creator.macro.MutableContext):
