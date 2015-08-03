@@ -35,14 +35,13 @@ setuptools.setup(
   author='Niklas Rosenstein',
   author_email='rosensteinniklas@gmail.com',
   url='https://github.com/creator-build/creator',
-  py_modules=['creator'],
   packages=setuptools.find_packages('.'),
   package_dir={'': '.'},
   package_data={
     'creator': ['builtins/*.crunit']
     },
   scripts=['scripts/creator'],
-  install_requires=['glob2', 'colorama'],
+  install_requires=['glob2==0.4.1', 'colorama==0.3.1'],
   classifiers=[
     "Development Status :: 5 - Production/Stable",
     "Programming Language :: Python",
