@@ -33,10 +33,9 @@ else:
 
 # Remove all paths that contain exactly this file. It would import itself
 # instead of the creator module.
-basename = os.path.basename(__file__)
 for path in sys.path[:]:
-  ref_file = os.path.join(path, basename)
-  if os.path.isfile(ref_file) and samefile(ref_file, __file__):
+  ref_file = os.path.join(path, 'creator.py')
+  if os.path.isfile(ref_file):
     sys.path.remove(path)
 
 import creator.__main__
