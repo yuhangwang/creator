@@ -54,10 +54,12 @@ int main(void) {
 }
 ```
 
-Create a '.crunit' file in hello_world such as 'hello_world.crunit'
+Create a '.creator' file in hello_world:
 
 ```python
-~/Desktop/hello_world $ cat hello_world.crunit
+~/Desktop/hello_world $ cat .creator
+# @creator.unit.name = creator.hello_world.cpp
+
 load('platform', 'p')
 load('compiler', 'c')
 
@@ -84,11 +86,15 @@ def run():
 Use creator to build and run the program
 
 ```
-niklas ~/Desktop/hello_world_cpp $ creator program run
+niklas ~/Desktop/hello_world_cpp $ creator run
 creator: exporting to: build.ninja
-creator: running: ninja -f build.ninja
-[2/2] clang++ -o /Users/niklas/Desktop/hello_wor.../niklas/Desktop/hello_world_cpp/build/obj/main.o
-creator: running task 'hello_world:run'
+creator: running: ninja -f build.ninja creator_hello_world_cpp_objects
+[1/1] cl /nologo /c /FoC:\Users\niklas\repos\creator-...klas\repos\creator-build\hello_world.cpp\src\main.cpp
+main.cpp
+C:\Program Files (x86)\Microsoft Visual Studio 11.0\VC\INCLUDE\xlocale(336) : warning C4530: C++ exception handler used, but unwind semantics are not enabled. Specify /EHsc
+creator: running: ninja -f build.ninja creator_hello_world_cpp_program
+[1/1] cl /nologo /FeC:\Users\niklas\repos\creator-bui...epos\creator-build\hello_world.cpp\build\obj\main.obj
+creator: running task 'creator.hello_world.cpp:run'
 Hello, World!
 ```
 

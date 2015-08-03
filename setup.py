@@ -44,7 +44,7 @@ setuptools.setup(
   packages=setuptools.find_packages('.'),
   package_dir={'': '.'},
   package_data={
-    'creator': ['builtins/*.crunit']
+    'creator': ['builtins/*.creator']
     },
   scripts=scripts,
   install_requires=['glob2==0.4.1', 'colorama==0.3.1'],
