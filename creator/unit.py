@@ -504,7 +504,7 @@ class Unit(object):
       self.aliases[alias] = identifier
     return unit
 
-  def shell(self, command, shell=True, stack_depth=0):
+  def shell(self, command, shell=True, cwd=None, stack_depth=0):
     """
     Runs *command* attached to the current terminal. *command* is
     expanded before it is used to spawn a process.
@@ -516,9 +516,9 @@ class Unit(object):
     command = self.eval(command, stack_depth=stack_depth + 1)
     if not shell:
       command = shlex.split(command)
-    return subprocess.call(command, shell=shell)
+    return subprocess.call(command, shell=shell, cwd=cwd)
 
-  def shell_get(self, command, shell=True, stack_depth=0):
+  def shell_get(self, command, shell=True, cwd=None, stack_depth=0):
     """
     Runs *command* in the shell and returns a :class:`creator.utils.Response`
     object. *command* is expanded before it is used to spawn a process.
@@ -530,7 +530,7 @@ class Unit(object):
     command = self.eval(command, stack_depth=stack_depth + 1)
     if not shell:
       command = shlex.split(command)
-    return creator.utils.Response(command, shell=shell)
+    return creator.utils.Response(command, shell=shell, cwd=cwd)
 
   def target(self, *requirements):
     """

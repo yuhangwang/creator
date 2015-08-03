@@ -260,13 +260,13 @@ class Response(object):
   class ExitCodeError(Exception):
     pass
 
-  def __init__(self, command, shell=False):
+  def __init__(self, command, shell=False, cwd=None):
     if not command:
       raise ValueError('empty command sequence')
     super().__init__()
     self.command = command
     self.process = subprocess.Popen(command, stdout=subprocess.PIPE,
-      stderr=subprocess.STDOUT, shell=shell)
+      stderr=subprocess.STDOUT, shell=shell, cwd=cwd)
     self.content = self.process.communicate()[0].decode()
     self.buffer = io.StringIO(self.content)
     self.returncode = self.process.returncode
