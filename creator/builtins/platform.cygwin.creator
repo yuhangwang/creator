@@ -1,3 +1,5 @@
+# @creator.unit.name = platform.cygwin
+#
 # Copyright (C) 2015 Niklas Rosenstein
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -18,7 +20,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-extends('compiler.gcc')
+extends('platform.nt')
 
-define('cc', 'clang')
-define('cpp', 'clang++')
+define('objp', '')
+define('objs', 'o')
+define('libp', 'lib')
+define('libs', 'a')

@@ -1,3 +1,5 @@
+# @creator.unit.name = platform.linux
+#
 # Copyright (C) 2015 Niklas Rosenstein
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,17 +21,17 @@
 # THE SOFTWARE.
 
 define('binp', '')
-define('bins', 'exe')
+define('bins', '')
 define('bin', '$(prefix $(suffix $0,$bins),$binp)')
 
 define('objp', '')
-define('objs', 'obj')
+define('objs', 'o')
 define('obj', '$(prefix $(suffix $0,$objs),$objp)')
 
-define('libp', '')
-define('libs', 'lib')
+define('libp', 'lib')
+define('libs', 'a')
 define('lib', '$(prefix $(suffix $0,$libs),$libp)')
 
-define('dllp', '')
-define('dlls', 'dll')
+define('dllp', 'lib')
+define('dlls', 'so')
 define('dll', '$(prefix $(suffix $0,$dlls),$dllp)')

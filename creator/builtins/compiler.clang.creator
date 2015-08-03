@@ -1,3 +1,5 @@
+# @creator.unit.name = compiler.clang
+#
 # Copyright (C) 2015 Niklas Rosenstein
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -18,18 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-platform = eval('$Platform')
-if defined('creator.platform'):
-  load_name = eval('platform.$creator.platform')
-elif platform == 'Windows':
-  load_name = 'platform.nt'
-elif platform == 'Cygwin':
-  load_name = 'platform.cygwin'
-elif platform == 'Linux':
-  load_name = 'platform.linux'
-elif platform == 'Darwin':
-  load_name = 'platform.darwin'
-else:
-  raise EnvironmentError('unsupported platform "{0}"'.format(platform))
+extends('compiler.gcc')
 
-extends(load_name)
+define('cc', 'clang')
+define('cpp', 'clang++')

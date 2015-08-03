@@ -1,3 +1,5 @@
+# @creator.unit.name = platform.darwin
+#
 # Copyright (C) 2015 Niklas Rosenstein
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -18,19 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-platform = eval('$Platform')
-standard = eval('$PlatformStandard')
-if defined('creator.compiler'):
-  load_name = eval('compiler.$creator.compiler')
-elif platform == 'Windows':
-  load_name = 'compiler.msvc'
-elif platform == 'Cygwin':
-  load_name = 'compiler.gcc'
-elif platform == 'Linux':
-  load_name = 'compiler.gcc'
-elif platform == 'Darwin':
-  load_name = 'compiler.clang'
-else:
-  raise EnvironmentError('unsupported platform "{0}"'.format(platform))
+extends('platform.linux')
 
-extends(load_name)
+define('dllp', '')
+define('dlls', 'dylib')
