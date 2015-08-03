@@ -72,12 +72,12 @@ class Workspace(object):
 
   def info(self, *args, **kwargs):
     kwargs.setdefault('fg', 'cyan')
-    term_print('creator:', *args, **kwargs)
+    term_print('==> creator:', *args, **kwargs)
 
   def warn(self, *args, **kwargs):
     kwargs.setdefault('fg', 'red')
     kwargs.setdefault('attr', ('bright',))
-    term_print('creator:', *args, **kwargs)
+    term_print('==> creator:', *args, **kwargs)
 
   def run_static_unit(self, filename):
     """
@@ -471,7 +471,7 @@ class Unit(object):
       items.append(arg)
 
     creator.utils.term_print(
-      'creator: INFO [{0}]'.format(self.identifier), *items, **kwargs)
+      '==> creator: [{0}]'.format(self.identifier), *items, **kwargs)
 
   def warn(self, *args, **kwargs):
     kwargs['fg'] = kwargs.pop('color', 'red')
@@ -482,7 +482,7 @@ class Unit(object):
       items.append(arg)
 
     creator.utils.term_print(
-      'creator: WARN [{0}]'.format(self.identifier), *items, **kwargs)
+      '==> creator: [{0}]'.format(self.identifier), *items, **kwargs)
 
   def load(self, identifier, alias=None):
     """
