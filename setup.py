@@ -29,7 +29,7 @@ if sys.version_info[0] != 3:
 long_description = ''
 setuptools.setup(
   name='creator-build',
-  version='0.0.3-dev',
+  version='0.0.3',
   description='Meta Build System for Ninja',
   long_description=long_description,
   author='Niklas Rosenstein',
