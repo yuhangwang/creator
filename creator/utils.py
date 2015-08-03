@@ -98,6 +98,28 @@ def normpath(x):
   return os.path.normpath(os.path.abspath(os.path.expanduser(x)))
 
 
+def read_metadata(filename):
+  """
+  Reads .creator metadata and returns it as a dictionary from a file.
+  It will read from the first line and checks all lines that start with
+  a hash symbol. A meta value is formatted as
+
+      @key = value
+  """
+
+  regex = re.compile('^#\s*@([\w\.\_\-]+)\s*=\s*(.*)')
+  metadata = {}
+  with open(filename) as fp:
+    for line in fp:
+      if not line.startswith('#'):
+        break
+      match = regex.match(line)
+      if not match:
+        continue
+      metadata[match.group(1)] = match.group(2)
+  return metadata
+
+
 def quote(s):
   """
   Better implementation of :func:`shlex.quote` which uses single-quotes

@@ -73,13 +73,10 @@ parser.add_argument('-a', '--args', help='Additional arguments for all '
   default=[])
 
 
-def log(*args, **kwargs):
-  kwargs.setdefault('fg', 'cyan')
-  term_print('creator:', *args, **kwargs)
 
 
-def call_subprocess(args):
-  log("running: " + ' '.join(creator.utils.quote(x) for x in args))
+def call_subprocess(args, workspace):
+  workspace.info("running: " + ' '.join(creator.utils.quote(x) for x in args))
   return subprocess.call(args)
 
 
@@ -129,13 +126,24 @@ def main(argv=None):
   # look at the current directory and use the only .crunit that
   # is in there.
   if not args.unit:
-    files = glob.glob('*.crunit')
-    if not files:
-      parser.error('no *.crunit file in the current directory')
-    elif len(files) > 1:
-      parser.error('multiple *.crunit files in the current '
-        'directory, use -u/--unit to specify which.')
-    args.unit = creator.utils.set_suffix(os.path.basename(files[0]), '')
+    if os.path.exists('.creator'):
+      metadata = creator.utils.read_metadata('.creator')
+      if not 'creator.unit.name' in metadata:
+        workspace.warn("'.creator' missing @creator.unit.name")
+        return 1
+      args.unit = metadata['creator.unit.name']
+      if not creator.utils.validate_identifier(args.unit):
+        workspace.warn("'.creator' invalid @creator.unit.name")
+        return 1
+    else:
+      files = glob.glob('*.creator') + glob.glob('*.crunit')
+      if not files:
+        workspace.warn("no '*.creator' or '*.crunit' files in current dir")
+        return 2
+      elif len(files) > 1:
+        workspace.warn("multiple '*.crunit' and/or '*.creator' files in "
+          "the current directory, use -u/--unit to specify which.")
+      args.unit = creator.utils.set_suffix(os.path.basename(files[0]), '')
 
   # Load the active unit and set up all targets.
   unit = workspace.load_unit(args.unit)
@@ -166,12 +174,12 @@ def main(argv=None):
     # Print a warning for each specified non-buildable target.
     for target in targets:
       if isinstance(target, creator.unit.Task):
-        log("warning: {0} is a task".format(target.identifier))
+        workspace.info("warning: {0} is a task".format(target.identifier))
 
   # If we have any buildable targets specified, no targets specified at
   # all or if we should only export the build definitions, do exactly that.
   if not args.no_export and (args.export or defaults or not targets):
-    log("exporting to: {0}".format(args.output))
+    workspace.info("exporting to: {0}".format(args.output))
     with open(args.output, 'w') as fp:
       creator.ninja.export(fp, workspace, unit, defaults)
     if args.export:
@@ -185,16 +193,16 @@ def main(argv=None):
 
   # No targets specified on the command-line? Build it all.
   if not targets:
-    return call_subprocess(ninja_args)
+    return call_subprocess(ninja_args, workspace)
   else:
     # Run each target with its own call to ninja and the tasks in between.
     for target in targets:
       if isinstance(target, creator.unit.Task):
-        log("running task '{0}'".format(target.identifier))
+        workspace.info("running task '{0}'".format(target.identifier))
         target.func()
       elif isinstance(target, creator.unit.Target):
         ident = creator.ninja.ident(target.identifier)
-        res = call_subprocess(ninja_args + [ident])
+        res = call_subprocess(ninja_args + [ident], workspace)
         if res != 0:
           return res
 

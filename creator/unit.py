@@ -29,6 +29,7 @@ import warnings
 import weakref
 
 from creator.macro import TextNode as raw
+from creator.utils import term_print
 
 
 class UnitNotFoundError(Exception):
@@ -65,6 +66,18 @@ class Workspace(object):
     filename = os.path.join(os.path.expanduser('~'), '.creator_profile')
     if os.path.isfile(filename):
       self.run_static_unit(filename)
+
+    # Cache for the metadata that was read from .creator files.
+    self._metadata_cache = {}
+
+  def info(self, *args, **kwargs):
+    kwargs.setdefault('fg', 'cyan')
+    term_print('creator:', *args, **kwargs)
+
+  def warn(self, *args, **kwargs):
+    kwargs.setdefault('fg', 'red')
+    kwargs.setdefault('attr', ('bright',))
+    term_print('creator:', *args, **kwargs)
 
   def run_static_unit(self, filename):
     """
@@ -112,17 +125,37 @@ class Workspace(object):
       UnitNotFoundError: If the unit could not be found.
     """
 
-    filename = identifier + '.crunit'
+    crunit_fn = identifier + '.crunit'
+    def check_file(filename):
+      if filename.endswith('.creator'):
+        try:
+          metadata = self._metadata_cache[filename]
+        except KeyError:
+          metadata = creator.utils.read_metadata(filename)
+          if 'creator.unit.name' not in metadata:
+            self.warn("'{0}' missing @creator.unit.name'".format(filename))
+          self._metadata_cache[filename] = metadata
+
+        if metadata.get('creator.unit.name') == identifier:
+          return True
+      elif os.path.basename(filename) == crunit_fn:
+        return True
+      return False
+
+    # Check first and second level files in search path.
     for dirname in self.path:
       if not os.path.isdir(dirname):
         continue
-      path = os.path.join(dirname, filename)
-      if os.path.isfile(path):
-        return path
       for item in os.listdir(dirname):
-        path = os.path.join(dirname, item, filename)
-        if os.path.isfile(path):
-          return path
+        item = os.path.join(dirname, item)
+        if os.path.isfile(item) and check_file(item):
+          return item
+        elif not os.path.isdir(item):
+          continue
+        for second in os.listdir(item):
+          second = os.path.join(item, second)
+          if os.path.isfile(second) and check_file(second):
+            return second
 
     raise UnitNotFoundError(identifier)
 
