@@ -104,6 +104,9 @@ def glob2(pattern):
   for recursive file pattern matching.
   """
 
+  pattern = pattern.replace('\\', '/')
+  pattern = pattern.replace('/', os.path.sep)
+
   # Find the top-most directory that contains no patterns.
   indices = [pattern.find('*'), pattern.find('?')]
   indices = filter(lambda x: x >= 0, indices)
@@ -112,8 +115,6 @@ def glob2(pattern):
   else:
     root = os.path.dirname(pattern[:min(indices)]) or '.'
 
-  pattern = pattern.replace('\\', '/')
-  pattern = pattern.replace('/', os.path.sep)
   pattern = re.escape(pattern)
   pattern = pattern.replace('\\*\\*', '.*?')
   pattern = pattern.replace('\\*', '[^/\\\\]*?')
