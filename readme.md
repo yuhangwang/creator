@@ -66,16 +66,16 @@ define('Sources', '$(wildcard $ProjectPath/src/*.cpp)')
 define('Objects', '$(p:obj $(move $Sources, $ProjectPath/src, $BuildDir/obj))')
 define('Program', '$(p:bin $BuildDir/main)')
 
-@target
+@target()
 def objects():
   objects.build_each(
     '$Sources', '$Objects', '$c:cpp $c:compileonly $(c:objout $@) $(quote $<)')
 
-@target
+@target(objects)
 def program():
   program.build('$Objects', '$Program', '$c:cpp $(c:binout $@) $(quotesplit $<)')
 
-@task
+@task(program)
 def run():
   shell('$(quote $Program)')
 ```
