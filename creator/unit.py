@@ -327,7 +327,7 @@ class Unit(object):
     with open(filename) as fp:
       code = compile(fp.read(), filename, 'exec', dont_inherit=True)
     self.scope['__file__'] = filename
-    self.scope['__name__'] = '__crunit__'
+    self.scope['__name__'] = '__creator__'
     exec(code, self.scope)
 
   def is_static(self):
