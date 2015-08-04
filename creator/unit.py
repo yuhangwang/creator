@@ -265,7 +265,6 @@ class Unit(object):
       'eval': self.eval,
       'exit': sys.exit,
       'extends': self.extends,
-      'foreach_split': self.foreach_split,
       'info': self.info,
       'join': creator.utils.join,
       'load': self.load,
@@ -365,7 +364,7 @@ class Unit(object):
     # todo: This is a rather dirty implementation. :-)
     self.define(name, '${' + name + '}' + value)
 
-  def confirm(self, text, stack_depth=0):
+  def confirm(self, text):
     """
     Asks the user for a confirmation via stdin after expanding the
     *text* and appending it with ``'[Y/n]``.
@@ -376,7 +375,7 @@ class Unit(object):
       bool: True if the user said yes, False if he or she said no.
     """
 
-    text = self.eval(text, stack_depth=stack_depth + 1)
+    text = self.eval(text)
     while True:
       self.info('{0} [Y/n]'.format(text), color='red', end=' ')
       response = input().strip().lower()
@@ -398,17 +397,17 @@ class Unit(object):
 
     return self.context.has_macro(name)
 
-  def eq(self, left, right, stack_depth=0):
+  def eq(self, left, right):
     if isinstance(left, str):
-      left = self.eval(left, stack_depth=stack_depth + 1)
+      left = self.eval(left)
     elif isinstance(right, str):
-      right = self.eval(right, stack_depth=stack_depth + 1)
+      right = self.eval(right)
     return left == right
 
-  def ne(self, left, right, stack_depth=0):
-    return not self.eq(left, right, stack_depth=stack_depth+1)
+  def ne(self, left, right):
+    return not self.eq(left, right)
 
-  def eval(self, text, supp_context=None, stack_depth=0):
+  def eval(self, text, supp_context=None):
     """
     Evaluates *text* as a macro string in the units context.
 
@@ -417,18 +416,15 @@ class Unit(object):
       supp_context (creator.macro.ContextProvider): A context that
         will be taken into account additionally to the stack frame
         and unit context or None.
-      stack_depth (int): The number of frames to go backwards from
-        the calling frame to use the local and global variables from.
     Returns:
       str: The result of the evaluation.
     """
 
-    context = creator.macro.ChainContext(self.context)
-    if stack_depth >= 0:
-      sf_context = creator.macro.StackFrameContext(stack_depth + 1)
-      context.contexts.insert(0, sf_context)
-    if supp_context is not None:
+    if supp_context:
+      context = creator.macro.ChainContext(self.context)
       context.contexts.insert(0, supp_context)
+    else:
+      context = self.context
     macro = creator.macro.parse(text, context)
     return macro.eval(context, [])
 
@@ -448,26 +444,13 @@ class Unit(object):
     self.context.update(unit.context, context_switch=True)
     return unit
 
-  def foreach_split(self, inputs, outputs, stack_depth=0):
-    """
-    Shortcut for ``zip(split(eval(inputs)), split(eval(outputs)))``.
-    """
-
-    warnings.warn("foreach_split() is deprecated, use "
-      "Target.build_each() instead", DeprecationWarning)
-
-    eval = self.eval
-    inputs = creator.utils.split(eval(inputs, stack_depth=stack_depth + 1))
-    outputs = creator.utils.split(eval(outputs, stack_depth=stack_depth + 1))
-    return zip(inputs, outputs)
-
   def info(self, *args, **kwargs):
     kwargs['fg'] = kwargs.pop('color', 'cyan')
 
     items = []
     for arg in args:
       if isinstance(arg, str):
-        arg = self.eval(arg, stack_depth=1)
+        arg = self.eval(arg)
       items.append(arg)
 
     creator.utils.term_print(
@@ -478,7 +461,7 @@ class Unit(object):
     items = []
     for arg in args:
       if isinstance(arg, str):
-        arg = self.eval(arg, stack_depth=1)
+        arg = self.eval(arg)
       items.append(arg)
 
     creator.utils.term_print(
@@ -504,7 +487,7 @@ class Unit(object):
       self.aliases[alias] = identifier
     return unit
 
-  def shell(self, command, shell=True, cwd=None, stack_depth=0):
+  def shell(self, command, shell=True, cwd=None):
     """
     Runs *command* attached to the current terminal. *command* is
     expanded before it is used to spawn a process.
@@ -513,12 +496,12 @@ class Unit(object):
       int: The exit-code of the process.
     """
 
-    command = self.eval(command, stack_depth=stack_depth + 1)
+    command = self.eval(command)
     if not shell:
       command = shlex.split(command)
     return subprocess.call(command, shell=shell, cwd=cwd)
 
-  def shell_get(self, command, shell=True, cwd=None, stack_depth=0):
+  def shell_get(self, command, shell=True, cwd=None):
     """
     Runs *command* in the shell and returns a :class:`creator.utils.Response`
     object. *command* is expanded before it is used to spawn a process.
@@ -527,7 +510,7 @@ class Unit(object):
       creator.utils.Response: The object that contains the response data.
     """
 
-    command = self.eval(command, stack_depth=stack_depth + 1)
+    command = self.eval(command)
     if not shell:
       command = shlex.split(command)
     return creator.utils.Response(command, shell=shell, cwd=cwd)
@@ -742,10 +725,9 @@ class Target(BaseTarget):
   def add(self, *args, **kwargs):
     warnings.warn("Target.add() is deprecated, use "
       "Target.build() instead", DeprecationWarning)
-    kwargs.setdefault('stack_depth', 1)
     return self.build(*args, **kwargs)
 
-  def build(self, inputs, outputs, command, each=False, stack_depth=0):
+  def build(self, inputs, outputs, command, each=False):
     """
     Associated the *inputs* with the *outputs* being built by the
     specified *\*commands*. All parameters passed to this function must
@@ -769,8 +751,6 @@ class Target(BaseTarget):
         but it expects the caller to use the ``$in`` and ``$out`` macros.
     """
 
-    stack_depth += 1
-
     # Invoke the listeners and allow them to modify the input data.
     # Eg. a plugin could add the header files that are required for
     # the build to the input files.
@@ -783,13 +763,11 @@ class Target(BaseTarget):
       listener(self, 'build', data)
 
     # Evaluate and split the input files into a list.
-    input_files = creator.utils.split(self.unit.eval(
-      data['inputs'], stack_depth=stack_depth))
+    input_files = creator.utils.split(self.unit.eval(data['inputs']))
     input_files = [creator.utils.normpath(f) for f in input_files]
 
     # Evaluate and split the output files into a list.
-    output_files = creator.utils.split(self.unit.eval(
-      data['outputs'], stack_depth=stack_depth))
+    output_files = creator.utils.split(self.unit.eval(data['outputs']))
     output_files = [creator.utils.normpath(f) for f in output_files]
 
     context = creator.macro.MutableContext()
@@ -800,7 +778,7 @@ class Target(BaseTarget):
       for fin, fout in zip(input_files, output_files):
         context['<'] = raw(fin)
         context['@'] = raw(fout)
-        command = self.unit.eval(data['command'], context, stack_depth=stack_depth)
+        command = self.unit.eval(data['command'], context)
         self.command_data.append({
           'inputs': [fin],
           'outputs': [fout],
@@ -810,7 +788,7 @@ class Target(BaseTarget):
     else:
       context['<'] = raw(creator.utils.join(input_files))
       context['@'] = raw(creator.utils.join(output_files))
-      command = self.unit.eval(data['command'], context, stack_depth=stack_depth)
+      command = self.unit.eval(data['command'], context)
       self.command_data.append({
         'inputs': input_files,
         'outputs': output_files,
@@ -818,9 +796,8 @@ class Target(BaseTarget):
         'command': command,
       })
 
-  def build_each(self, inputs, outputs, command, stack_depth=0):
-    stack_depth += 1
-    return self.build(inputs, outputs, command, each=True, stack_depth=stack_depth)
+  def build_each(self, inputs, outputs, command):
+    return self.build(inputs, outputs, command, each=True)
 
   def export(self, writer):
     """
