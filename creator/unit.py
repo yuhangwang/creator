@@ -386,8 +386,8 @@ class Unit(object):
       else:
         print("Please reply Yes or No.", end=' ')
 
-  def define(self, name, value):
-    self.context[name] = value
+  def define(self, name, text=''):
+    self.context[name] = text
 
   def defined(self, name):
     """
