@@ -205,6 +205,21 @@ class Workspace(object):
         if not target.is_setup:
           target.do_setup()
 
+  def all_targets(self):
+    """
+    Returns:
+      list of BaseTarget: A generator yielding all targets
+        that are declared in the Workspace, sorted by their
+        identifier.
+    """
+
+    results = []
+    for unit in self.units.values():
+      for target in unit.targets.values():
+        results.append(target)
+    results.sort(key=lambda x: x.identifier)
+    return results
+
 
 class Unit(object):
   """

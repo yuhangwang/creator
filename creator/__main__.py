@@ -64,11 +64,12 @@ parser.add_argument('-o', '--output', help='Override the output file of '
   'the ninja build definitions. By default, the file will be created at '
   '<build.ninja>. If the <$NinjaOut> variable is specified in a unit, it '
   'will be used as the output file if this option is omitted.')
-parser.add_argument('-c', '--clean', help='Adds the `-t clean` options '
-  'to the ninja invokation.', action='store_true')
+parser.add_argument('-c', '--clean', help='Clean the output files of the '
+  'specified targets or all output files if no targets are specified. '
+  'Implies -n/--no-export.', action='store_true')
 parser.add_argument('--clean-with-dependencies', help='Like -c/--clean, '
-  'but also cleans all the dependencies of the specified targets.',
-  action='store_true')
+  'but also cleans all the dependencies of the specified targets. '
+  'Implies -c/--clean.', action='store_true')
 parser.add_argument('-v', '--verbose', help='Adds the `-v` option to '
   'the inja invokation.', action='store_true')
 parser.add_argument('-a', '--args', help='Additional arguments for all '
@@ -108,6 +109,12 @@ def main(argv=None):
     parser.error('conflicting options -n/--no-export and -e/--export')
   if args.dry and args.export:
     parser.error('conflicting options -d/--dry and -e/--export')
+  if args.clean_with_dependencies:
+    args.clean = True
+  if args.clean and args.export:
+    parser.error('conflicting options -c/--clean and -e/--export')
+  if args.clean:
+    args.no_export = True
 
   workspace = creator.unit.Workspace()
   workspace.path.extend(args.unitpath)
@@ -193,9 +200,26 @@ def main(argv=None):
     if args.export:
       return 0
 
-  ninja_args = ['ninja', '-f', args.output] + args.args
+  # Clean the target output files if --clean or --clean-with-dependencies
+  # is specified.
   if args.clean or args.clean_with_dependencies:
-    ninja_args.extend(['-t', 'clean'])
+    if not targets:
+      targets = workspace.all_targets()
+    cleaned_files = 0
+    for target in targets:
+      if isinstance(target, creator.unit.Target):
+        for entry in target.command_data:
+          for filename in entry['outputs']:
+            if os.path.isfile(filename):
+              try:
+                os.remove(filename)
+                cleaned_files += 1
+              except OSError:
+                workspace.error("Could not remove '{}'.".format(filename))
+    workspace.info('Cleaned {} files.'.format(cleaned_files))
+    return 0
+
+  ninja_args = ['ninja', '-f', args.output] + args.args
   if args.verbose:
     ninja_args.append('-v')
 
