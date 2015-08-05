@@ -66,13 +66,14 @@ parser.add_argument('-o', '--output', help='Override the output file of '
   'will be used as the output file if this option is omitted.')
 parser.add_argument('-c', '--clean', help='Adds the `-t clean` options '
   'to the ninja invokation.', action='store_true')
+parser.add_argument('--clean-with-dependencies', help='Like -c/--clean, '
+  'but also cleans all the dependencies of the specified targets.',
+  action='store_true')
 parser.add_argument('-v', '--verbose', help='Adds the `-v` option to '
   'the inja invokation.', action='store_true')
 parser.add_argument('-a', '--args', help='Additional arguments for all '
   'invokations of <ninja> done by Creator.', nargs=argparse.REMAINDER,
   default=[])
-
-
 
 
 def call_subprocess(args, workspace):
@@ -167,8 +168,15 @@ def main(argv=None):
 
   # Collect a list of all targets and tasks.
   targets = [unit.get_target(x) for x in args.targets]
-  complete_target_list(targets)
-  defaults = [t.identifier for t in targets if isinstance(t, creator.unit.Target)]
+
+  # We must not complete the target list if we're only cleaning
+  # without dependencies.
+  if not args.clean or args.clean_with_dependencies:
+    complete_target_list(targets)
+
+  # Collect a list of all targets that will be processed by Ninja.
+  ninja_targets = [
+    t.identifier for t in targets if isinstance(t, creator.unit.Target)]
 
   if args.export:
     # Print a warning for each specified non-buildable target.
@@ -178,15 +186,15 @@ def main(argv=None):
 
   # If we have any buildable targets specified, no targets specified at
   # all or if we should only export the build definitions, do exactly that.
-  if not args.no_export and (args.export or defaults or not targets):
+  if not args.no_export and (args.export or ninja_targets or not targets):
     workspace.info("exporting to: {0}".format(args.output))
     with open(args.output, 'w') as fp:
-      creator.ninja.export(fp, workspace, unit, defaults)
+      creator.ninja.export(fp, workspace, unit, ninja_targets)
     if args.export:
       return 0
 
   ninja_args = ['ninja', '-f', args.output] + args.args
-  if args.clean:
+  if args.clean or args.clean_with_dependencies:
     ninja_args.extend(['-t', 'clean'])
   if args.verbose:
     ninja_args.append('-v')
