@@ -191,6 +191,14 @@ def main(argv=None):
       if isinstance(target, creator.unit.Task):
         workspace.info("warning: {0} is a task".format(target.identifier))
 
+  # If there are not targets specified and there are no targets
+  # in the workspace, we don't have to export a ninja.build file
+  # nor invoke Ninja.
+  if not targets and not ninja_targets:
+    if not any(isinstance(t, creator.unit.Target) for t in workspace.all_targets()):
+      args.dry = True
+      args.no_export = True
+
   # If we have any buildable targets specified, no targets specified at
   # all or if we should only export the build definitions, do exactly that.
   if not args.no_export and (args.export or ninja_targets or not targets):
@@ -224,7 +232,7 @@ def main(argv=None):
     ninja_args.append('-v')
 
   # No targets specified on the command-line? Build it all.
-  if not targets:
+  if not targets and not args.dry:
     return call_subprocess(ninja_args, workspace)
   else:
     # Run each target with its own call to ninja and the tasks in between.
