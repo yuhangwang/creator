@@ -1,6 +1,8 @@
 *Creator* - Meta build system for ninja
 =======================================
-[![Join the chat at https://gitter.im/creator-build/creator](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/creator-build/creator?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge) [![Code Issues](http://www.quantifiedcode.com/api/v1/project/1ae08c98c628410faf1daafb9f632fd2/badge.svg)](http://www.quantifiedcode.com/app/project/1ae08c98c628410faf1daafb9f632fd2)
+
+[![Join the chat at https://gitter.im/creator-build/creator](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/creator-build/creator?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Code Issues](http://www.quantifiedcode.com/api/v1/project/abf468ccc4564f6fb8280e6e646fee3d/badge.svg)](http://www.quantifiedcode.com/app/project/abf468ccc4564f6fb8280e6e646fee3d)
 
 *Creator* is a simple, pure Python meta build system for [ninja][] with focus
 on an organised and comprehensible way of specifying the build rules. Unlike
