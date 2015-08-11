@@ -456,7 +456,7 @@ class Parser(object):
   """
 
   CHARS_WHITESPACE = string.whitespace
-  CHARS_IDENTIFIER = string.ascii_letters + string.digits + '_.<@:'
+  CHARS_IDENTIFIER = string.ascii_letters + string.digits + '-_.<@:'
   CHAR_POPEN = '('
   CHAR_PCLOSE = ')'
   CHAR_BOPEN = '{'
