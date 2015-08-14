@@ -456,7 +456,9 @@ class Unit(object):
     """
 
     unit = self.load(identifier)
-    self.context.update(unit.context, context_switch=True)
+    for key, value in list(unit.context.items()):
+      if key not in ('ProjectPath', 'self'):
+        self.context.transition(key, value)
     return unit
 
   def info(self, *args, **kwargs):
@@ -960,11 +962,16 @@ class UnitContext(creator.macro.ContextProvider):
         key = key[len(namespace):]
         yield (key, value)
 
-  def update(self, mapping, context_switch=False):
-    for key, value in list(mapping.items()):
-      if context_switch and isinstance(value, creator.macro.ExpressionNode):
-        value = value.copy(self)
-      self[key] = value
+  def transition(self, key, value):
+    '''
+    Set the variable *key* to the specified *value*. If *value*
+    is an ExpressionNode, it will be copied with a context switch
+    to this unit context.
+    '''
+
+    if isinstance(value, creator.macro.ExpressionNode):
+      value = value.copy(self)
+    self[key] = value
 
   def has_macro(self, name):
     if self.workspace.context.has_macro(self._prepare_name(name)):
