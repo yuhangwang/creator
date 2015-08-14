@@ -74,12 +74,23 @@ class Workspace(object):
 
   def info(self, *args, **kwargs):
     kwargs.setdefault('fg', 'cyan')
+    kwargs.setdefault('file', sys.stderr)
     term_print('==> creator:', *args, **kwargs)
 
   def warn(self, *args, **kwargs):
+    kwargs.setdefault('fg', 'magenta')
+    kwargs.setdefault('attr', ('bright',))
+    kwargs.setdefault('file', sys.stderr)
+    term_print('==> creator:', *args, **kwargs)
+
+  def error(self, *args, **kwargs):
+    exit = kwargs.pop('exit', True)
     kwargs.setdefault('fg', 'red')
     kwargs.setdefault('attr', ('bright',))
+    kwargs.setdefault('file', sys.stderr)
     term_print('==> creator:', *args, **kwargs)
+    if exit:
+      sys.exit(1)
 
   def run_static_unit(self, filename):
     """
@@ -298,6 +309,7 @@ class Unit(object):
       'defined': self.defined,
       'e': self.eval,
       'eq': self.eq,
+      'error': self.error,
       'ne': self.ne,
       'eval': self.eval,
       'exit': sys.exit,
@@ -414,7 +426,7 @@ class Unit(object):
 
     text = self.eval(text)
     while True:
-      self.info('{0} [Y/n]'.format(text), color='red', end=' ')
+      self.warn('{0} [Y/n]'.format(text), end=' ')
       response = input().strip().lower()
       if response in ('y', 'yes'):
         return True
@@ -505,26 +517,30 @@ class Unit(object):
 
   def info(self, *args, **kwargs):
     kwargs['fg'] = kwargs.pop('color', 'cyan')
-
     items = []
     for arg in args:
       if isinstance(arg, str):
         arg = self.eval(arg)
       items.append(arg)
-
-    creator.utils.term_print(
-      '==> creator: [{0}]'.format(self.identifier), *items, **kwargs)
+    self.workspace.info('[{0}]'.format(self.identifier), *items, **kwargs)
 
   def warn(self, *args, **kwargs):
+    kwargs['fg'] = kwargs.pop('color', 'magenta')
+    items = []
+    for arg in args:
+      if isinstance(arg, str):
+        arg = self.eval(arg)
+      items.append(arg)
+    self.workspace.info('[{0}]'.format(self.identifier), *items, **kwargs)
+
+  def error(self, *args, **kwargs):
     kwargs['fg'] = kwargs.pop('color', 'red')
     items = []
     for arg in args:
       if isinstance(arg, str):
         arg = self.eval(arg)
       items.append(arg)
-
-    creator.utils.term_print(
-      '==> creator: [{0}]'.format(self.identifier), *items, **kwargs)
+    self.workspace.info('[{0}]'.format(self.identifier), *items, **kwargs)
 
   def load(self, identifier, alias=None):
     """
