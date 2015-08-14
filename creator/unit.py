@@ -196,6 +196,19 @@ class Workspace(object):
       raise
     return unit
 
+  def get_target(self, identifier, unit=None):
+    '''
+    Resolves a target identifier and returns the target. If a relative
+    target identifier is specified, the *unit* must be specified.
+    '''
+
+    namespace, target = creator.utils.parse_var(identifier)
+    if not namespace:
+      if not unit:
+        raise ValueError('relative target identifier but no unit specified')
+      namespace = unit.identifier
+    return self.get_unit(namespace).get_target(target)
+
   def setup_targets(self):
     """
     Sets up all targets in the workspace.
