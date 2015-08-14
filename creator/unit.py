@@ -70,6 +70,7 @@ class Workspace(object):
 
     # Cache for the metadata that was read from .creator files.
     self._metadata_cache = {}
+    self._ident_cache = {}
 
   def info(self, *args, **kwargs):
     kwargs.setdefault('fg', 'cyan')
@@ -114,51 +115,57 @@ class Workspace(object):
       raise ValueError('no such unit', identifier)
     return self.units[identifier]
 
-  def find_unit(self, identifier):
+  def find_unit(self, identifier, *, allow_recache=True):
     """
     Searches for the filename of a unit in the search :attr:`path`.
 
     Args:
       identifier (str): The identifier of the unit to load.
+      allow_recache (bool): If set to False, the cache will not be
+        re-generated if a unit could not be found.
     Returns:
       str: The path to the unit script.
     Raises:
       UnitNotFoundError: If the unit could not be found.
     """
 
-    crunit_fn = identifier + '.crunit'
-    def check_file(filename):
-      if filename.endswith('.creator'):
-        try:
-          metadata = self._metadata_cache[filename]
-        except KeyError:
-          metadata = creator.utils.read_metadata(filename)
+    filename = self._ident_cache.get(identifier)
+    if filename is not None:
+      return filename
+    if not allow_recache:
+      raise UnitNotFoundError(identifier)
+
+    def check_file(path):
+      path = creator.utils.normpath(path)
+      if path.endswith('.creator'):
+        metadata = self._metadata_cache.get(path)
+        if metadata is None:
+          metadata = creator.utils.read_metadata(path)
           if 'creator.unit.name' not in metadata:
-            self.warn("'{0}' missing @creator.unit.name'".format(filename))
-          self._metadata_cache[filename] = metadata
+            self.warn("'{0}' missing @creator.unit.name".format(path))
+          self._metadata_cache[path] = metadata
 
-        if metadata.get('creator.unit.name') == identifier:
-          return True
-      elif os.path.basename(filename) == crunit_fn:
-        return True
-      return False
+        ident = metadata.get('creator.unit.name')
+        if ident is not None:
+          self._ident_cache[ident] = path
+      elif path.endswith('.crunit'):
+        ident = os.path.basename(path)[:-7]
+        self._ident_cache[ident] = path
 
-    # Check first and second level files in search path.
+    # Re-generate the identifier cacheself.
     for dirname in self.path:
       if not os.path.isdir(dirname):
         continue
-      for item in os.listdir(dirname):
-        item = os.path.join(dirname, item)
-        if os.path.isfile(item) and check_file(item):
-          return item
-        elif not os.path.isdir(item):
-          continue
-        for second in os.listdir(item):
-          second = os.path.join(item, second)
-          if os.path.isfile(second) and check_file(second):
-            return second
 
-    raise UnitNotFoundError(identifier)
+      for path in creator.utils.abs_listdir(dirname):
+        if os.path.isfile(path):
+          check_file(path)
+        elif os.path.isdir(path):
+          for path in creator.utils.abs_listdir(path):
+            if os.path.isfile(path):
+              check_file(path)
+
+    return self.find_unit(identifier, allow_recache=False)
 
   def load_unit(self, identifier):
     """

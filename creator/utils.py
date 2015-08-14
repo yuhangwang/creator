@@ -33,6 +33,10 @@ else:
   colorama.init()
 
 
+def abs_listdir(dirname):
+  return (os.path.join(dirname, x) for x in os.listdir(dirname))
+
+
 def term_stylize(fg=None, bg=None, attr=(), reset=False):
   """
   Generates ANSI escape sequences for the specified settings.
