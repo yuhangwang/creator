@@ -954,7 +954,7 @@ class Task(BaseTarget):
 
   def _copy_from(self, target, unit):
     super(Task, self)._copy_from(target, unit)
-    self._func = types.FunctionType(self._func.__code__, unit.scope)
+    self._func = types.FunctionType(target._func.__code__, unit.scope)
 
 
 class WorkspaceContext(creator.macro.MutableContext):
