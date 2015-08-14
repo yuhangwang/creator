@@ -25,6 +25,7 @@ import os
 import shlex
 import subprocess
 import sys
+import types
 import warnings
 import weakref
 
@@ -202,7 +203,7 @@ class Workspace(object):
 
     for unit in self.units.values():
       for target in unit.targets.values():
-        if not target.is_setup:
+        if not target.is_setup and not target.abstract:
           target.do_setup()
 
   def all_targets(self):
@@ -210,13 +211,14 @@ class Workspace(object):
     Returns:
       list of BaseTarget: A generator yielding all targets
         that are declared in the Workspace, sorted by their
-        identifier.
+        identifier. Abstract targets will be ignored.
     """
 
     results = []
     for unit in self.units.values():
       for target in unit.targets.values():
-        results.append(target)
+        if not target.abstract:
+          results.append(target)
     results.sort(key=lambda x: x.identifier)
     return results
 
@@ -443,7 +445,7 @@ class Unit(object):
     macro = creator.macro.parse(text, context)
     return macro.eval(context, [])
 
-  def extends(self, identifier):
+  def extends(self, identifier, inherit_targets=True):
     """
     Loads all the contents of the Unit with the specified *identifier*
     into the scope of this Unit and substitutes the context references
@@ -451,6 +453,9 @@ class Unit(object):
 
     Args:
       identifier (str): The name of the unit to inherit from.
+      inherit_targets (bool): If True, targets will be inherited
+        and adjusted to the context of this unit. Abstract targets
+        in the source unit will not be abstract in this unit.
     Returns:
       Unit: The Unit matching the *identifier*.
     """
@@ -459,6 +464,23 @@ class Unit(object):
     for key, value in list(unit.context.items()):
       if key not in ('ProjectPath', 'self'):
         self.context.transition(key, value)
+
+    for key, value in unit.aliases.items():
+      self.aliases[key] = value
+
+    if inherit_targets:
+      for name, target in unit.targets.items():
+        clone = target.copy(self)
+        clone.abstract = False
+        self.targets[name] = clone
+
+      # Replace abstract dependencies with the non-abstract clones.
+      for target in self.targets.values():
+        for index, dep in enumerate(target.dependencies):
+          for name, ref in unit.target.items():
+            if ref.abstract and ref is dep:
+              dep = target.dependencies[index] = self.targets[name]
+
     return unit
 
   def info(self, *args, **kwargs):
@@ -532,13 +554,19 @@ class Unit(object):
       command = shlex.split(command)
     return creator.utils.Response(command, shell=shell, cwd=cwd)
 
-  def target(self, *requirements):
+  def target(self, *requirements, abstract=False):
     """
     Wraps a Python function to be treated as a target to declare the
     build definitions. _\*requirements_ must be passed zero or more
     requirements that are to be built before the actual target is.
 
     Requirements for targets may only be targets, not tasks.
+
+    Arguments:
+      \*requirements (str or BaseTarget)
+      abstract (bool): Pass True to mark this as an abstract target.
+        Abstract targets are ignored when exporting to a Ninja file
+        but can be inherited when using :meth:`extends`.
 
     Returns:
       callable: A decorator for a function that returns a :class:`Target`.
@@ -553,16 +581,15 @@ class Unit(object):
         raise TypeError('func must be callable', type(func))
       if func.__name__ in self.targets:
         raise ValueError('target "{0}" already exists'.format(func.__name__))
-      def on_setup(*args, **kwargs):
+      def initializer(*args, **kwargs):
         [target.requires(req) for req in requirements]
-        func(*args, **kwargs)
-      target = Target(self, func.__name__, on_setup, False)
+      target = Target(self, func.__name__, initializer, func, abstract=abstract)
       self.targets[func.__name__] = target
       return target
 
     return decorator
 
-  def task(self, *requirements):
+  def task(self, *requirements, abstract=False):
     """
     Wraps a Python function as a task which can be invoked by the
     command-line or required by another task. _\*requirements_ must be
@@ -570,6 +597,12 @@ class Unit(object):
     actual task is executed.
 
     Requirements may be targets or tasks.
+
+    Arguments:
+      \*requirements (str or BaseTarget)
+      abstract (bool): Pass True to mark this as an abstract target.
+        Abstract targets are ignored when exporting to a Ninja file
+        but can be inherited when using :meth:`extends`.
 
     Returns:
       callable: A decorator for a function that returns a :class:`Task`.
@@ -586,7 +619,7 @@ class Unit(object):
         raise ValueError('task name already reserved', func.__name__)
       def on_setup(*args, **kwargs):
         [task.requires(req) for req in requirements]
-      task = Task(func, self, func.__name__, on_setup)
+      task = Task(func, self, func.__name__, on_setup, abstract=abstract)
       self.targets[func.__name__] = task
       return func
 
@@ -595,13 +628,15 @@ class Unit(object):
 
 class BaseTarget(object):
 
-  def __init__(self, unit, name, on_setup=None, pass_self=True, args=(), kwargs=None):
+  def __init__(self, unit, name, initalizer=None, on_setup=None, abstract=False):
     if not isinstance(unit, creator.unit.Unit):
       raise TypeError('unit must be creator.unit.Unit', type(unit))
     if not isinstance(name, str):
       raise TypeError('name must be str', type(name))
     if not creator.utils.validate_identifier(name):
       raise ValueError('name is not a valid identifier', name)
+    if initalizer is not None and not callable(initalizer):
+      raise TypeError('initalizer must be None or callable')
     if on_setup is not None and not callable(on_setup):
       raise TypeError('on_setup must be None or callable')
     super().__init__()
@@ -610,10 +645,9 @@ class BaseTarget(object):
     self.dependencies = []
     self.listeners = []
     self.is_setup = False
+    self.initalizer = initalizer
     self.on_setup = on_setup
-    self.pass_self = pass_self
-    self.args = args
-    self.kwargs = kwargs or {}
+    self.abstract = abstract
 
   @property
   def unit(self):
@@ -640,6 +674,10 @@ class BaseTarget(object):
     Adds *target* as a dependency for this target. If the *target* is
     not already set-up, it will be by this function.
 
+    Note that *target* can only be abstract if *self* is also an
+    abstract target. Abstract targets can only depend on abstract
+    targets from the same module.
+
     Args:
       target (str or Target): The target to build before the other.
         If a string is passed, the target name is resolved in the
@@ -647,12 +685,14 @@ class BaseTarget(object):
     """
 
     if isinstance(target, str):
-      namespace, target = creator.utils.parse_var(target)
-      if not namespace:
-        namespace = self.unit.identifier
-      target = self.unit.workspace.get_unit(namespace).get_target(target)
+      target = self.unit.workspace.get_target(target, self.unit)
     elif not isinstance(target, Target):
       raise TypeError('target must be Target object', type(target))
+    if target.abstract:
+      if not self.abstract:
+        raise ValueError('can not depend on abstract target')
+      if self.unit is not target.unit:
+        raise ValueError('can not depend on abstract target from different unit')
     self.acccept_requirement(target)
     if not target.is_setup:
       target.do_setup()
@@ -674,14 +714,48 @@ class BaseTarget(object):
     for listener in self.listeners:
       listener(self, 'do_setup', None)
 
+    if self.initalizer is not None:
+      self.initalizer()
     if self.on_setup is not None:
-      if self.pass_self:
-        self.on_setup(self, *self.args, **self.kwargs)
-      else:
-        self.on_setup(*self.args, **self.kwargs)
+      self.on_setup()
 
     self.is_setup = True
     return True
+
+  def copy(self, unit):
+    '''
+    Create a copy of the target. The target will be attached to
+    the specified *unit*. The default implementation will create
+    a copy of the wrapped function and assign the units scope to
+    it.
+    '''
+
+    obj = object.__new__(type(self))
+    obj._copy_from(self, unit)
+    return obj
+
+  def _copy_from(self, target, unit):
+    '''
+    Private. Fills *self* from the source *target* and using the
+    new *unit* instead of the *target*s old unit.
+    '''
+
+    if target.on_setup:
+      func = target.on_setup
+      on_setup = types.FunctionType(func.__code__, unit.scope,
+        name=func.__name__, argdefs=func.__defaults__, closure=func.__closure__)
+    else:
+      on_setup = None
+
+    self._unit = weakref.ref(unit)
+    self._name = target.name
+    self.dependencies = list(target.dependencies)
+    self.listeners = list(target.listeners)
+    self.is_setup = False
+    self.initalizer = target.initalizer
+    self.on_setup = on_setup
+    self.abstract = target.abstract
+    unit.scope[self._name] = self
 
 
 class Target(BaseTarget):
@@ -858,6 +932,10 @@ class Target(BaseTarget):
 
     writer.build(creator.ninja.ident(self.identifier), 'phony', phonies)
 
+  def _copy_from(self, target, unit):
+    super(Target, self)._copy_from(target, unit)
+    self.command_data = []
+
 
 class Task(BaseTarget):
   """
@@ -873,6 +951,10 @@ class Task(BaseTarget):
   @property
   def func(self):
     return self._func
+
+  def _copy_from(self, target, unit):
+    super(Task, self)._copy_from(target, unit)
+    self._func = types.FunctionType(self._func.__code__, unit.scope)
 
 
 class WorkspaceContext(creator.macro.MutableContext):
