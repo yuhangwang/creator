@@ -945,10 +945,6 @@ class UnitContext(creator.macro.ContextProvider):
       namespace = None
     return creator.utils.create_var(namespace, varname)
 
-  def __getitem__(self, name):
-    name = self._prepare_name(name)
-    return self.workspace.context[name]
-
   def __setitem__(self, name, value):
     if isinstance(value, str):
       value = creator.macro.parse(value, self)
