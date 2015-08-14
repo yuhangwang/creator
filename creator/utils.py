@@ -37,69 +37,66 @@ def abs_listdir(dirname):
   return (os.path.join(dirname, x) for x in os.listdir(dirname))
 
 
-def term_stylize(fg=None, bg=None, attr=(), reset=False):
+def create_var(namespace, varname):
   """
-  Generates ANSI escape sequences for the specified settings.
+  Returns the full identifer to access the variable *varname* in
+  *namespace*.
+  """
+
+  if namespace is not None:
+    return namespace + ':' + varname
+  return varname
+
+
+def join(items):
+  """
+  Joins a list of strings into a single string by putting semicolons
+  between the items. This string can later be split with the :func:`split`
+  function. Semicolons are escaped using backslashes.
 
   Args:
-    fg (str): The name of the foreground color to apply or None.
-    bg (str): The name of the background color to apply or None.
-    attr (str or list of str): The attribute name or a list of
-      attribute names to apply.
-    reset (bool): True to reset to default. Every other argument
-      will be ignored.
+    items (list of str): The items to join into a single string.
   Returns:
-    str
+    str: The semicolon separated list of the specified *items*.
   """
 
-  if not colorama:
-    return ''
-  if reset:
-    return colorama.Style.RESET_ALL
-  s = ''
-  if fg is not None:
-    s += getattr(colorama.Fore, fg.upper())
-  if bg is not None:
-    s += getattr(colorama.Back, bg.upper())
-  if isinstance(attr, str):
-    attr = []
-  for name in attr:
-    s += getattr(colorama.Style, name.upper())
-  return s
-
-
-def term_format(text, *args, **kwargs):
-  """
-  The same as :meth:`ttyv` but takes *text* and wraps it in the
-  specified tty visual settings and appends a reset command.
-  """
-
-  if not colorama:
-    return text
-  return ttyv(*args, **kwargs) + text + colorama.Style.RESET_ALL
-
-
-def term_print(*args, **kwargs):
-  """
-  Like :func:`print`, but colors the output based on the specified
-  *fg*, *bg* and *attr* keyword arguments.
-  """
-
-  fg = kwargs.pop('fg', None)
-  bg = kwargs.pop('bg', None)
-  attr = kwargs.pop('attr', ())
-  if not colorama:
-    print(*args, **kwargs)
-  else:
-    end = kwargs.pop('end', '\n')
-    kwargs['end'] = ''
-    print(term_stylize(fg, bg, attr), end='')
-    print(*args, **kwargs)
-    print(colorama.Style.RESET_ALL, end=end)
+  return ';'.join(item.replace(';', '\\;') for item in items if item)
 
 
 def normpath(x):
   return os.path.normpath(os.path.abspath(os.path.expanduser(x)))
+
+
+def parse_var(var):
+  """
+  Parses a variable name with an optional namespace access and
+  returns a tuple of ``(namespace, varname)``. If a namespace
+  separator is specified, the returned namespace will be an
+  empty string (as there should be a namespace but there were
+  no characters for it).
+  """
+
+  namespace, sep, varname = var.partition(':')
+  if not varname:
+    namespace, varname = varname, namespace
+  if not sep:
+    namespace = None
+  return (namespace, varname)
+
+
+def quote(s):
+  """
+  Better implementation of :func:`shlex.quote` which uses single-quotes
+  on Windows, which are not supported however.
+  """
+
+  if os.name == 'nt' and os.sep == '\\':
+    s = s.replace('"', '\\"')
+    if re.search('\s', s):
+      s = '"' + s + '"'
+    return s
+  else:
+    return shlex.quote(s)
 
 
 def read_metadata(filename):
@@ -124,21 +121,6 @@ def read_metadata(filename):
   return metadata
 
 
-def quote(s):
-  """
-  Better implementation of :func:`shlex.quote` which uses single-quotes
-  on Windows, which are not supported however.
-  """
-
-  if os.name == 'nt' and os.sep == '\\':
-    s = s.replace('"', '\\"')
-    if re.search('\s', s):
-      s = '"' + s + '"'
-    return s
-  else:
-    return shlex.quote(s)
-
-
 def set_suffix(filename, suffix):
   """
   Changes the suffix of the specified *filename* to *suffix*. If the
@@ -160,46 +142,6 @@ def set_suffix(filename, suffix):
       suffix = '.' + suffix
     filename += suffix
   return filename
-
-
-def validate_identifier(identifier):
-  """
-  Args:
-    identifier (str): The identifier to test.
-  Returns:
-    bool: True if the *identifier* is a valid identifier for a unit,
-      False if it is not.
-  """
-
-  return bool(re.match('^[A-Za-z0-9\-\._]+$', identifier))
-
-
-def parse_var(var):
-  """
-  Parses a variable name with an optional namespace access and
-  returns a tuple of ``(namespace, varname)``. If a namespace
-  separator is specified, the returned namespace will be an
-  empty string (as there should be a namespace but there were
-  no characters for it).
-  """
-
-  namespace, sep, varname = var.partition(':')
-  if not varname:
-    namespace, varname = varname, namespace
-  if not sep:
-    namespace = None
-  return (namespace, varname)
-
-
-def create_var(namespace, varname):
-  """
-  Returns the full identifer to access the variable *varname* in
-  *namespace*.
-  """
-
-  if namespace is not None:
-    return namespace + ':' + varname
-  return varname
 
 
 def split(text):
@@ -232,22 +174,83 @@ def split(text):
   return items
 
 
-def join(items):
+def term_format(text, *args, **kwargs):
   """
-  Joins a list of strings into a single string by putting semicolons
-  between the items. This string can later be split with the :func:`split`
-  function. Semicolons are escaped using backslashes.
+  The same as :meth:`ttyv` but takes *text* and wraps it in the
+  specified tty visual settings and appends a reset command.
+  """
+
+  if not colorama:
+    return text
+  return ttyv(*args, **kwargs) + text + colorama.Style.RESET_ALL
+
+
+def term_print(*args, **kwargs):
+  """
+  Like :func:`print`, but colors the output based on the specified
+  *fg*, *bg* and *attr* keyword arguments.
+  """
+
+  fg = kwargs.pop('fg', None)
+  bg = kwargs.pop('bg', None)
+  attr = kwargs.pop('attr', ())
+  if not colorama:
+    print(*args, **kwargs)
+  else:
+    end = kwargs.pop('end', '\n')
+    kwargs['end'] = ''
+    print(term_stylize(fg, bg, attr), end='')
+    print(*args, **kwargs)
+    print(colorama.Style.RESET_ALL, end=end)
+
+
+def term_stylize(fg=None, bg=None, attr=(), reset=False):
+  """
+  Generates ANSI escape sequences for the specified settings.
 
   Args:
-    items (list of str): The items to join into a single string.
+    fg (str): The name of the foreground color to apply or None.
+    bg (str): The name of the background color to apply or None.
+    attr (str or list of str): The attribute name or a list of
+      attribute names to apply.
+    reset (bool): True to reset to default. Every other argument
+      will be ignored.
   Returns:
-    str: The semicolon separated list of the specified *items*.
+    str
   """
 
-  return ';'.join(item.replace(';', '\\;') for item in items if item)
+  if not colorama:
+    return ''
+  if reset:
+    return colorama.Style.RESET_ALL
+  s = ''
+  if fg is not None:
+    s += getattr(colorama.Fore, fg.upper())
+  if bg is not None:
+    s += getattr(colorama.Back, bg.upper())
+  if isinstance(attr, str):
+    attr = []
+  for name in attr:
+    s += getattr(colorama.Style, name.upper())
+  return s
 
 
-class Response(object):
+def validate_identifier(identifier):
+  """
+  Args:
+    identifier (str): The identifier to test.
+  Returns:
+    bool: True if the *identifier* is a valid identifier for a unit,
+      False if it is not.
+  """
+
+  return bool(re.match('^[A-Za-z0-9\-\._]+$', identifier))
+
+
+Cursor = collections.namedtuple('Cursor', 'position lineno colno')
+
+
+class ShellCall(object):
   """
   This class represents a subprocess execution and provides some
   function to process the result or even get the complete output.
@@ -258,7 +261,7 @@ class Response(object):
     OSError: If an error occured executing the command, usually if
       the program could not be found.
     ValueError: If *command* is an empty list.
-    Response.ExitCodeError: If the program exited with a non-zero exit-code.
+    ShellCall.ExitCodeError: If the program exited with a non-zero exit-code.
   """
 
   class ExitCodeError(Exception):
@@ -285,9 +288,6 @@ class Response(object):
 
   def readline(self):
     return self.buffer.readline()
-
-
-Cursor = collections.namedtuple('Cursor', 'position lineno colno')
 
 
 class Scanner(object):

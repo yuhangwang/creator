@@ -324,7 +324,7 @@ class Unit(object):
       'target': self.target,
       'task': self.task,
       'warn': self.warn,
-      'ExitCodeError': creator.utils.Response.ExitCodeError,
+      'ExitCodeError': creator.utils.ShellCall.ExitCodeError,
     }
 
   def get_identifier(self):
@@ -578,17 +578,17 @@ class Unit(object):
 
   def shell_get(self, command, shell=True, cwd=None):
     """
-    Runs *command* in the shell and returns a :class:`creator.utils.Response`
+    Runs *command* in the shell and returns a :class:`creator.utils.ShellCall`
     object. *command* is expanded before it is used to spawn a process.
 
     Returns:
-      creator.utils.Response: The object that contains the response data.
+      creator.utils.ShellCall: The object that contains the response data.
     """
 
     command = self.eval(command)
     if not shell:
       command = shlex.split(command)
-    return creator.utils.Response(command, shell=shell, cwd=cwd)
+    return creator.utils.ShellCall(command, shell=shell, cwd=cwd)
 
   def target(self, *requirements, abstract=False):
     """
