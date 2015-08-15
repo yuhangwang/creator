@@ -100,6 +100,27 @@ def complete_target_list(targets, for_target=None):
       complete_target_list(targets, dep)
 
 
+def collapse_target_list(targets):
+  """
+  Collapses subsequent :class:`creator.unit.Target` into a single
+  list of targets that can be built with one ninja invokation.
+  """
+
+  result = []
+  collapased = []
+  for target in targets:
+    if isinstance(target, creator.unit.Target):
+      collapased.append(target)
+    else:
+      if collapased:
+        result.append(collapased)
+      collapased = []
+      result.append(target)
+  if collapased:
+    result.append(collapased)
+  return result
+
+
 def main(argv=None):
   if argv is None:
     argv = sys.argv[1:]
@@ -232,14 +253,17 @@ def main(argv=None):
   if not targets and not args.dry:
     return call_subprocess(ninja_args, workspace)
   else:
+    targets = collapse_target_list(targets)
+
     # Run each target with its own call to ninja and the tasks in between.
     for target in targets:
       if isinstance(target, creator.unit.Task):
         workspace.info("running task '{0}'".format(target.identifier))
         target.func()
-      elif isinstance(target, creator.unit.Target):
-        ident = creator.ninja.ident(target.identifier)
-        res = call_subprocess(ninja_args + [ident], workspace)
+      elif isinstance(target, list):
+        idents = [creator.ninja.ident(t.identifier) for t in target]
+        idents = [creator.utils.quote(x) for x in idents]
+        res = call_subprocess(ninja_args + idents, workspace)
         if res != 0:
           return res
 
