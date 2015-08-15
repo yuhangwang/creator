@@ -137,19 +137,16 @@ def main(argv=None):
     if os.path.exists('.creator'):
       metadata = creator.utils.read_metadata('.creator')
       if not 'creator.unit.name' in metadata:
-        workspace.warn("'.creator' missing @creator.unit.name")
-        return 1
+        workspace.error("'.creator' missing @creator.unit.name")
       args.unit = metadata['creator.unit.name']
       if not creator.utils.validate_identifier(args.unit):
-        workspace.warn("'.creator' invalid @creator.unit.name")
-        return 1
+        workspace.error("'.creator' invalid @creator.unit.name")
     else:
       files = glob.glob('*.creator') + glob.glob('*.crunit')
       if not files:
-        workspace.warn("no '*.creator' or '*.crunit' files in current dir")
-        return 2
+        workspace.error("no '*.creator' or '*.crunit' files in current dir")
       elif len(files) > 1:
-        workspace.warn("multiple '*.crunit' and/or '*.creator' files in "
+        workspace.error("multiple '*.crunit' and/or '*.creator' files in "
           "the current directory, use -u/--unit to specify which.")
       args.unit = creator.utils.set_suffix(os.path.basename(files[0]), '')
 
