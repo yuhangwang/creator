@@ -151,25 +151,26 @@ def main(argv=None):
     if key:
       workspace.context[key] = value
 
-  # If not Unit Identifier was specified on the command-line,
-  # look at the current directory and use the only .crunit that
-  # is in there.
+  # Look at the current directory and figure out the main unit
+  # that should be used by this session.
   if not args.unit:
-    if os.path.exists('.creator'):
-      metadata = creator.utils.read_metadata('.creator')
-      if not 'creator.unit.name' in metadata:
-        workspace.error("'.creator' missing @creator.unit.name")
-      args.unit = metadata['creator.unit.name']
-      if not creator.utils.validate_identifier(args.unit):
-        workspace.error("'.creator' invalid @creator.unit.name")
+    if os.path.exists('Creator'):
+      filename = 'Creator'
+    elif os.path.exists('.creator'):
+      filename = '.creator'
     else:
-      files = glob.glob('*.creator') + glob.glob('*.crunit')
+      files = glob.glob('*.creator')
       if not files:
-        workspace.error("no '*.creator' or '*.crunit' files in current dir")
+        workspace.error("no 'Creator' or '*.creator' files in current directory")
       elif len(files) > 1:
-        workspace.error("multiple '*.crunit' and/or '*.creator' files in "
-          "the current directory, use -u/--unit to specify which.")
-      args.unit = creator.utils.set_suffix(os.path.basename(files[0]), '')
+        workspace.error("multiple '*.creator' files in the current directory, "
+          "use -u/--unit to specify which to use.")
+      filename = files[0]
+
+    metadata = creator.utils.read_metadata(filename)
+    if not 'creator.unit.name' in metadata:
+      workspace.error("'{0}' missing @creator.unit.name".format(filename))
+    args.unit = metadata['creator.unit.name']
 
   # Load the active unit and set up all targets.
   unit = workspace.load_unit(args.unit)

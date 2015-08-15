@@ -147,7 +147,7 @@ class Workspace(object):
 
     def check_file(path):
       path = creator.utils.normpath(path)
-      if path.endswith('.creator'):
+      if path.endswith('.creator') or os.path.basename(path) == 'Creator':
         metadata = self._metadata_cache.get(path)
         if metadata is None:
           metadata = creator.utils.read_metadata(path)
@@ -158,9 +158,6 @@ class Workspace(object):
         ident = metadata.get('creator.unit.name')
         if ident is not None:
           self._ident_cache[ident] = path
-      elif path.endswith('.crunit'):
-        ident = os.path.basename(path)[:-7]
-        self._ident_cache[ident] = path
 
     # Re-generate the identifier cacheself.
     for dirname in self.path:
