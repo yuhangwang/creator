@@ -37,3 +37,5 @@ import creator.ninja
 import creator.platform
 import creator.unit
 import creator.utils
+
+workspace = None

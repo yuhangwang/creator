@@ -121,6 +121,23 @@ def read_metadata(filename):
   return metadata
 
 
+def relpath(path, parent=None):
+  '''
+  Converts *path* to a relative path if it is a subpath of *parent*.
+  If *parent* is None, the current working directory is used.
+  '''
+
+  if os.path.isabs(path):
+    try:
+      rel_path = os.path.relpath(path, parent or os.getcwd())
+    except ValueError:
+      pass  # Can happen on Windows with different drive letters
+    else:
+      if rel_path and not rel_path.startswith(os.pardir):
+        path = rel_path
+  return path
+
+
 def set_suffix(filename, suffix):
   """
   Changes the suffix of the specified *filename* to *suffix*. If the

@@ -64,6 +64,9 @@ parser.add_argument('-o', '--output', help='Override the output file of '
   'the ninja build definitions. By default, the file will be created at '
   '<build.ninja>. If the <$NinjaOut> variable is specified in a unit, it '
   'will be used as the output file if this option is omitted.')
+parser.add_argument('-A', '--absolute-paths', action='store_true',
+  help='If this option is specified, Creator will use absolute paths '
+  'wherever possible (behaviour < 0.0.4).')
 parser.add_argument('-c', '--clean', help='Clean the output files of the '
   'specified targets or all output files if no targets are specified. '
   'Implies -n/--no-export.', action='store_true')
@@ -117,6 +120,8 @@ def main(argv=None):
     args.no_export = True
 
   workspace = creator.unit.Workspace()
+  creator.workspace = workspace
+  workspace.use_absolute_paths = args.absolute_paths
   workspace.path.extend(args.unitpath)
 
   # Evaluate the Defines and Macros passed via the command line.
@@ -162,7 +167,7 @@ def main(argv=None):
   if not args.output:
     args.output = unit.eval('$self:NinjaOut').strip()
     if args.output:
-      args.output = creator.utils.normpath(args.output)
+      args.output = workspace.normpath(args.output)
       dirname = os.path.dirname(args.output)
       if not os.path.isdir(dirname):
         os.makedirs(dirname)

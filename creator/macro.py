@@ -642,10 +642,14 @@ class Globals:
 
   @Function
   def wildcard(context, args):
+    if creator.workspace:
+      normpath = creator.workspace.normpath
+    else:
+      normpath = creator.utils.normpath
     patterns = [n.eval(context, []).strip() for n in args]
     items = []
     for pattern in patterns:
-      items.extend(glob2.glob(pattern))
+      items.extend(map(normpath, glob2.glob(pattern)))
     items.sort()
     return creator.utils.join(items)
 
@@ -692,9 +696,14 @@ class Globals:
 
   @Function
   def normpath(context, args):
+    # todo: Retrieve the current workspace and use its normpath() method.
+    if creator.workspace:
+      normpath = creator.workspace.normpath
+    else:
+      normpath = creator.utils.normpath
     items = ';'.join(n.eval(context, []).strip() for n in args)
     items = creator.utils.split(items)
-    return creator.utils.join(creator.utils.normpath(x) for x in items)
+    return creator.utils.join(normpath(x) for x in items)
 
   @Function
   def upper(context, args):

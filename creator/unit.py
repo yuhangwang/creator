@@ -59,6 +59,7 @@ class Workspace(object):
     self.path.append(os.path.join(os.path.dirname(__file__), 'builtins'))
     self.path.extend(os.getenv('CREATORPATH', '').split(os.pathsep))
     self.context = WorkspaceContext(self)
+    self.use_absolute_paths = False
     self.units = {}
     self.statics = {}
 
@@ -71,6 +72,18 @@ class Workspace(object):
     # Cache for the metadata that was read from .creator files.
     self._metadata_cache = {}
     self._ident_cache = {}
+
+  def normpath(self, path):
+    '''
+    Normalize the specified *path* using :func:`creator.utils.normpath`,
+    but additionally make the path relative if :attr:`use_absolute_paths`
+    is False with :fucn:`creator.utils.relpath`.
+    '''
+
+    path = creator.utils.normpath(path)
+    if not self.use_absolute_paths:
+      path = creator.utils.relpath(path)
+    return path
 
   def info(self, *args, **kwargs):
     kwargs.setdefault('fg', 'cyan')
@@ -101,7 +114,7 @@ class Workspace(object):
       Unit: The unit executed.
     """
 
-    filename = creator.utils.normpath(filename)
+    filename = self.normpath(filename)
     if filename in self.statics:
       return self.statics[filename]
 
@@ -146,7 +159,7 @@ class Workspace(object):
       raise UnitNotFoundError(identifier)
 
     def check_file(path):
-      path = creator.utils.normpath(path)
+      path = self.normpath(path)
       if path.endswith('.creator'):
         metadata = self._metadata_cache.get(path)
         if metadata is None:
@@ -282,7 +295,7 @@ class Unit(object):
 
   def __init__(self, project_path, identifier, workspace):
     super().__init__()
-    self.project_path = project_path
+    self.project_path = workspace.normpath(project_path)
     self.identifier = identifier
     self.workspace = workspace
     self.aliases = {'self': self.identifier}
@@ -888,13 +901,15 @@ class Target(BaseTarget):
     for listener in self.listeners:
       listener(self, 'build', data)
 
+    workspace = self.unit.workspace
+
     # Evaluate and split the input files into a list.
     input_files = creator.utils.split(self.unit.eval(data['inputs']))
-    input_files = [creator.utils.normpath(f) for f in input_files]
+    input_files = [workspace.normpath(f) for f in input_files]
 
     # Evaluate and split the output files into a list.
     output_files = creator.utils.split(self.unit.eval(data['outputs']))
-    output_files = [creator.utils.normpath(f) for f in output_files]
+    output_files = [workspace.normpath(f) for f in output_files]
 
     context = creator.macro.MutableContext()
 
@@ -937,6 +952,7 @@ class Target(BaseTarget):
     if not self.is_setup:
       raise RuntimeError('target "{0}" not set-up'.format(self.identifier))
 
+    workspace = self.unit.workspace
     writer.comment('Target: {0}'.format(self.identifier))
 
     # The outputs of depending targets must be listed additionally
@@ -948,7 +964,7 @@ class Target(BaseTarget):
       if not dep.is_setup:
         raise RuntimeError('target "{0}" not set-up'.format(dep.identifier))
       for entry in dep.command_data:
-        infiles |= set(map(creator.utils.normpath, entry['outputs']))
+        infiles |= set(map(workspace.normpath, entry['outputs']))
 
     infiles = list(infiles)
     phonies = []
