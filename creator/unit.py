@@ -74,22 +74,21 @@ class Workspace(object):
 
   def info(self, *args, **kwargs):
     kwargs.setdefault('fg', 'cyan')
-    kwargs.setdefault('file', sys.stderr)
+    # kwargs.setdefault('file', sys.stderr)
     term_print('==> creator:', *args, **kwargs)
 
   def warn(self, *args, **kwargs):
     kwargs.setdefault('fg', 'magenta')
-    kwargs.setdefault('attr', ('bright',))
-    kwargs.setdefault('file', sys.stderr)
+    # kwargs.setdefault('file', sys.stderr)
     term_print('==> creator:', *args, **kwargs)
 
   def error(self, *args, **kwargs):
-    exit = kwargs.pop('exit', True)
+    exit = kwargs.pop('exit', 1)
     kwargs.setdefault('fg', 'red')
     kwargs.setdefault('attr', ('bright',))
-    kwargs.setdefault('file', sys.stderr)
+    # kwargs.setdefault('file', sys.stderr)
     term_print('==> creator:', *args, **kwargs)
-    if exit:
+    if exit is not None:
       sys.exit(1)
 
   def run_static_unit(self, filename):
