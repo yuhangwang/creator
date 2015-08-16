@@ -657,6 +657,27 @@ class Unit(object):
 
 
 class BaseTarget(object):
+  '''
+  The base class for targets.
+
+  Attributes:
+    unit (creator.unit.Unit): The unit this target belongs to.
+    name (str): The name of the target.
+    dependencies (list of BaseTarget): A list of dependencies that are
+      required by this target.
+    identifier (str): The identifier of the target, which is the
+      units identifier and the targets name concatenated.
+    is_setup (bool): True if the target is set-up, False if not.
+    on_setup (callable)
+    initalizer (callable)
+    listeners (list of callable): A list of functions listening to
+      certain events of the target. The functions are invoked with
+      the three arguments ``(target, event, data)``.
+
+  Listener Events:
+    - ``'do_setup'``: Sent when :meth:`do_setup` is called. There is
+      no data for this event.
+  '''
 
   def __init__(self, unit, name, initalizer=None, on_setup=None, abstract=False):
     if not isinstance(unit, creator.unit.Unit):
@@ -701,35 +722,29 @@ class BaseTarget(object):
 
   def requires(self, target):
     """
-    Adds *target* as a dependency for this target. If the *target* is
-    not already set-up, it will be by this function.
+    Adds *target* as a dependency for this target. *target* can be a
+    string or target object. If it is a string, it will be resolved
+    immediately.
 
     Note that *target* can only be abstract if *self* is also an
     abstract target. Abstract targets can only depend on abstract
     targets from the same module.
 
     Args:
-      target (str or Target): The target to build before the other.
-        If a string is passed, the target name is resolved in the
-        workspace.
+      target (str or Target): The target to build before the current.
     """
 
-    if not isinstance(target, (str, BaseTarget)):
-      raise TypeError('target must be string or BaseTarget')
-    if not self.is_setup:
-      self.dependencies.append(target)
-    else:
-      if isinstance(target, str):
-        target = self.unit.workspace.get_target(target, self.unit)
-      if target.abstract:
-        if not self.abstract:
-          raise ValueError('can not depend on abstract target')
-        if self.unit is not target.unit:
-          raise ValueError('can not depend on abstract target from different unit')
-      self.acccept_requirement(target)
-      if not target.is_setup:
-        target.do_setup()
-      self.dependencies.append(target)
+    if isinstance(target, str):
+      target = self.unit.workspace.get_target(target, self.unit)
+    if target.abstract:
+      if not self.abstract:
+        raise ValueError('can not depend on abstract target')
+      if self.unit is not target.unit:
+        raise ValueError('can not depend on abstract target from different unit')
+    self.acccept_requirement(target)
+    if not target.is_setup:
+      target.do_setup()
+    self.dependencies.append(target)
 
   def do_setup(self):
     """
@@ -752,11 +767,6 @@ class BaseTarget(object):
       self.initalizer()
     if self.on_setup is not None:
       self.on_setup()
-
-    # Evaluate non-evaluated dependencies.
-    deps, self.dependencies = self.dependencies, []
-    for target in deps:
-      self.requires(target)
 
     return True
 
@@ -806,35 +816,12 @@ class Target(BaseTarget):
   loaded and evaluated. After this phase is complete, the target should
   be completely filled with all data.
 
-  Args:
-    unit (creator.unit.Unit): The unit this target belongs to.
-    name (str): The name of the target.
-    on_setup (callable): A Python function that is called on set-up.
-    pass_self (bool): True if the target should be passed as the first
-      argument to *on_setup*, False if not.
-    args (any): List of arguments passed to *on_setup*.
-    kwargs (any): List of keyword arguments passed to *on_setup*.
-
   Attributes:
-    unit (creator.unit.Unit): The unit this target belongs to.
-    name (str): The name of the target.
-    identifier (str): The identifier of the target, which is the
-      units identifier and the targets name concatenated.
-    is_setup (bool): True if the target is set-up, False if not.
-    on_setup (callable)
-    pass_self (bool)
-    args (any)
-    kwargs (any)
-    listeners (list of callable): A list of functions listening to
-      certain events of the target. The functions are invoked with
-      the three arguments ``(target, event, data)``.
     command_data (list of dict): A list of build commands. Each entry
       is a dictionary with the keys ``'inputs', 'outputs', 'command',
       'auxiliary'``.
 
   Listener Events:
-    - ``'do_setup'``: Sent when :meth:`do_setup` is called. There is
-      no data for this event.
     - ``'build'``: Sent when :meth:`build` is called. The data for
       this event is a dictionary ``{'inputs': str, 'outputs': str,
         'command': str, 'auxiliary': [], 'each': bool}``. The listener
