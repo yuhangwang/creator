@@ -613,9 +613,8 @@ class Unit(object):
         raise TypeError('func must be callable', type(func))
       if func.__name__ in self.targets:
         raise ValueError('target "{0}" already exists'.format(func.__name__))
-      def initializer(*args, **kwargs):
-        [target.requires(req) for req in requirements]
-      target = Target(self, func.__name__, initializer, func, abstract=abstract)
+      target = Target(self, func.__name__, None, func, abstract=abstract)
+      [target.requires(req) for req in requirements]
       self.targets[func.__name__] = target
       return target
 
@@ -649,9 +648,8 @@ class Unit(object):
         raise TypeError('func must be callable', type(func))
       if func.__name__ in self.targets:
         raise ValueError('task name already reserved', func.__name__)
-      def on_setup(*args, **kwargs):
-        [task.requires(req) for req in requirements]
-      task = Task(func, self, func.__name__, on_setup, abstract=abstract)
+      task = Task(func, self, func.__name__, None, abstract=abstract)
+      [task.requires(req) for req in requirements]
       self.targets[func.__name__] = task
       return func
 
@@ -716,19 +714,22 @@ class BaseTarget(object):
         workspace.
     """
 
-    if isinstance(target, str):
-      target = self.unit.workspace.get_target(target, self.unit)
-    elif not isinstance(target, Target):
-      raise TypeError('target must be Target object', type(target))
-    if target.abstract:
-      if not self.abstract:
-        raise ValueError('can not depend on abstract target')
-      if self.unit is not target.unit:
-        raise ValueError('can not depend on abstract target from different unit')
-    self.acccept_requirement(target)
-    if not target.is_setup:
-      target.do_setup()
-    self.dependencies.append(target)
+    if not isinstance(target, (str, BaseTarget)):
+      raise TypeError('target must be string or BaseTarget')
+    if not self.is_setup:
+      self.dependencies.append(target)
+    else:
+      if isinstance(target, str):
+        target = self.unit.workspace.get_target(target, self.unit)
+      if target.abstract:
+        if not self.abstract:
+          raise ValueError('can not depend on abstract target')
+        if self.unit is not target.unit:
+          raise ValueError('can not depend on abstract target from different unit')
+      self.acccept_requirement(target)
+      if not target.is_setup:
+        target.do_setup()
+      self.dependencies.append(target)
 
   def do_setup(self):
     """
@@ -742,6 +743,7 @@ class BaseTarget(object):
 
     if self.is_setup:
       raise RuntimeError('target "{0}" is already set-up'.format(self.identifier))
+    self.is_setup = True
 
     for listener in self.listeners:
       listener(self, 'do_setup', None)
@@ -751,7 +753,11 @@ class BaseTarget(object):
     if self.on_setup is not None:
       self.on_setup()
 
-    self.is_setup = True
+    # Evaluate non-evaluated dependencies.
+    deps, self.dependencies = self.dependencies, []
+    for target in deps:
+      self.requires(target)
+
     return True
 
   def copy(self, unit):
