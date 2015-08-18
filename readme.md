@@ -15,6 +15,10 @@ Check out the [Wiki][] for more information!
 > subject to change! If you want to use Creator, make sure to always use
 > the latest version from the *master* branch.
 
+__Get Started__
+
+Check out the [Creator Tutorial][] in the Wiki!
+
 __Features__
 
 - Creator is simple (and pure Python)
@@ -115,3 +119,4 @@ __Requirements__
 [colorama]: https://pypi.python.org/pypi/colorama
 [ninja]: https://github.com/martine/ninja
 [Wiki]: https://github.com/creator-build/creator/wiki
+[Creator Tutorial]: https://github.com/creator-build/creator/wiki/Creator-Tutorial
