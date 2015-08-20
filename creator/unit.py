@@ -122,7 +122,7 @@ class Workspace(object):
     """
 
     if identifier not in self.units:
-      raise ValueError('no such unit', identifier)
+      raise UnitNotFoundError(identifier)
     return self.units[identifier]
 
   def find_unit(self, identifier, *, allow_recache=True):
@@ -203,11 +203,21 @@ class Workspace(object):
     # Run the unit that we found.
     unit = Unit(os.path.dirname(filename), identifier, self)
     self.units[identifier] = unit
+
+    # Transfer all macros that have been set to the unit before
+    # it was loaded to the unit.
+    identifier_prefix = identifier + ':'
+    for key, value in list(self.context.macros.items()):
+      if key.startswith(identifier_prefix):
+        unit.context[key[len(identifier_prefix):]] = value
+        del self.context.macros[key]
+
     try:
       unit.run_unit_script(filename)
     except Exception:
       del self.units[identifier]
       raise
+
     return unit
 
   def get_target(self, identifier, unit=None):
@@ -279,13 +289,15 @@ class Unit(object):
 
   def __init__(self, project_path, identifier, workspace):
     super().__init__()
+    self.scope = {}
     self.project_path = project_path
     self.identifier = identifier
     self.workspace = workspace
     self.aliases = {'self': self.identifier}
     self.targets = {}
     self.context = UnitContext(self)
-    self.scope = self._create_scope()
+    self._executed_files = set()
+    self.scope.update(self._create_scope())
 
   def _create_scope(self):
     """
@@ -310,11 +322,10 @@ class Unit(object):
       'eval': self.eval,
       'exit': sys.exit,
       'extends': self.extends,
+      'include': self.run_unit_script,
       'info': self.info,
-      'join': creator.utils.join,
       'load': self.load,
       'raw': creator.macro.TextNode,
-      'split': creator.utils.split,
       'shell': self.shell,
       'shell_get': self.shell_get,
       'target': self.target,
@@ -368,11 +379,16 @@ class Unit(object):
     Executes the Python unit script at *filename* for this unit.
     """
 
+    filename = creator.utils.normpath(filename)
+    if filename in self._executed_files:
+      return
+
     with open(filename) as fp:
       code = compile(fp.read(), filename, 'exec', dont_inherit=True)
     self.scope['__file__'] = filename
     self.scope['__name__'] = '__creator__'
     exec(code, self.scope)
+    self._executed_files.add(filename)
 
   def is_static(self):
     return self._identifier.startswith('static|')
@@ -432,7 +448,8 @@ class Unit(object):
         print("Please reply Yes or No.", end=' ')
 
   def define(self, name, text=''):
-    self.context[name] = text
+    self.context[name] = creator.macro.parse_and_resolve(
+      name, text, self.context)
 
   def defined(self, name):
     """
@@ -448,6 +465,15 @@ class Unit(object):
     elif isinstance(right, str):
       right = self.eval(right)
     return left == right
+
+  def macro(self, text):
+    '''
+    Creates a expression node from the specified *text* bound
+    to this unit. If you assign this to a local variable, make
+    sure to prevent cyclic references.
+    '''
+
+    return creator.macro.parse(text, self.context)
 
   def ne(self, left, right):
     return not self.eq(left, right)
@@ -997,6 +1023,17 @@ class WorkspaceContext(creator.macro.MutableContext):
     self['Architecture'] = creator.macro.TextNode(
       creator.platform.architecture)
 
+  def __setitem__(self, name, value):
+    namespace, varname = creator.utils.parse_var(name)
+    if namespace is not None:
+      try:
+        unit = self.workspace.get_unit(namespace)
+        unit.context[varname] = value
+      except UnitNotFoundError:
+        pass
+    name = creator.utils.create_var(namespace or None, varname)
+    super().__setitem__(name, value)
+
   @property
   def workspace(self):
     return self._workspace()
@@ -1008,10 +1045,20 @@ class WorkspaceContext(creator.macro.MutableContext):
       return False
     return True
 
-  def get_macro(self, name, default=NotImplemented):
-    macro = super().get_macro(name, None)
-    if macro is not None:
+  def get_macro(self, name):
+    namespace, name = creator.utils.parse_var(name)
+    if namespace:
+      try:
+        unit = self.workspace.get_unit(namespace)
+        return unit.context.get_macro(name)
+      except UnitNotFoundError:
+        pass
+    name = creator.utils.create_var(namespace or None, name)
+    try:
+      macro = super().get_macro(name)
       return macro
+    except KeyError:
+      pass
     if not name.startswith('_') and hasattr(creator.macro.Globals, name):
       return getattr(creator.macro.Globals, name)
     if name in os.environ:
@@ -1046,21 +1093,14 @@ class UnitContext(creator.macro.ContextProvider):
     namespace, varname = creator.utils.parse_var(name)
     if namespace in self.unit.aliases:
       namespace = self.unit.aliases[namespace]
-    elif namespace is None:
-      namespace = self.unit.identifier
-    elif not namespace:
-      # Empty namespace specified, the resulting variable
-      # should have no namespace identifier in it.
-      namespace = None
-    return creator.utils.create_var(namespace, varname)
+    return namespace, varname
 
   def __setitem__(self, name, value):
-    if isinstance(value, str):
-      value = creator.macro.parse(value, self)
-    if not isinstance(value, creator.macro.ExpressionNode):
-      raise TypeError('value must be str or ExpressionNode', type(value))
-    name = self._prepare_name(name)
-    self.workspace.context[name] = value
+    namespace, name = self._prepare_name(name)
+    if namespace is None or namespace == self.unit.identifier:
+      self.unit.scope[name] = value
+    else:
+      self.workspace.context[creator.utils.create_var(namespace, name)] = value
 
   def items(self):
     namespace = creator.utils.create_var(self.unit.identifier, '')
@@ -1081,19 +1121,34 @@ class UnitContext(creator.macro.ContextProvider):
     self[key] = value
 
   def has_macro(self, name):
-    if self.workspace.context.has_macro(self._prepare_name(name)):
+    namespace, name = self._prepare_name(name)
+    if namespace is None and name in self.unit.scope:
       return True
-    return self.workspace.context.has_macro(name)
+    elif namespace == self.unit.identifier:
+      return name in self.unit.scope
+    else:
+      full_name = creator.utils.create_var(namespace, name)
+      return self.workspace.context.has_macro(full_name)
 
-  def get_macro(self, name, default=NotImplemented):
-    try:
-      return self.workspace.context.get_macro(self._prepare_name(name))
-    except KeyError:
+  def get_macro(self, name):
+    namespace, name = self._prepare_name(name)
+    if namespace == self.unit.identifier:
+      value = self.unit.scope[name]
+      return self._automacro(value)
+    elif namespace is None:
       try:
-        return self.workspace.context.get_macro(name)
+        value = self.unit.scope[name]
+        return self._automacro(value)
       except KeyError:
         pass
-    raise KeyError(name)
+    full_name = creator.utils.create_var(namespace, name)
+    return self.workspace.context.get_macro(full_name)
 
   def get_namespace(self):
     return self.unit.identifier
+
+  def _automacro(self, value):
+    if isinstance(value, creator.macro.ExpressionNode):
+      return value
+    else:
+      return creator.macro.TextNode(str(value))

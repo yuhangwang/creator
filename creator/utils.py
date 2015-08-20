@@ -37,13 +37,17 @@ def abs_listdir(dirname):
   return (os.path.join(dirname, x) for x in os.listdir(dirname))
 
 
-def create_var(namespace, varname):
+def create_var(namespace, varname, raise_=True):
   """
   Returns the full identifer to access the variable *varname* in
   *namespace*.
   """
 
+  if raise_ and ':' in varname:
+    raise ValueError('invalid variable name', varname)
   if namespace is not None:
+    if raise_ and ':' in namespace:
+      raise ValueError('invalid namespace name', namespace)
     return namespace + ':' + varname
   return varname
 
@@ -77,6 +81,8 @@ def parse_var(var):
   """
 
   namespace, sep, varname = var.partition(':')
+  if ':' in varname:
+    raise ValueError('invalid variable name', var)
   if not varname:
     namespace, varname = varname, namespace
   if not sep:

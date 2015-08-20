@@ -48,23 +48,17 @@ class ContextProvider(object, metaclass=abc.ABCMeta):
     return False
 
   @abc.abstractmethod
-  def get_macro(self, name, default=NotImplemented):
+  def get_macro(self, name):
     """
     Args:
       name (str): The name of the macro to retrieve.
-      default (any): The default value to be returned if the macro
-        can not be served. The default value is :class:`NotImplemented`
-        which causes this function to raise a :class:`KeyError` instead.
     Returns:
       ExpressionNode: The macro associated with the specified *name*.
     Raises:
-      KeyError: If there is no macro with the specified name and the
-        *default* parameter has the value :class:`NotImplemented`.
+      KeyError: If there is no macro with the specified name.
     """
 
-    if default is NotImplemented:
-      raise KeyError(name)
-    return default
+    raise KeyError(name)
 
   @abc.abstractmethod
   def get_namespace(self):
@@ -74,6 +68,20 @@ class ContextProvider(object, metaclass=abc.ABCMeta):
     """
 
     raise NotImplementedError
+
+  def get_aliases(self, name):
+    """
+    This function can be implemented by subclasses to specify under
+    what aliases the same macro can be found. The default implementation
+    simply returns *name*.
+
+    Args:
+      name (str): The name that was passed to :meth:`__setitem__`.
+    Returns:
+      list of str: A list of aliases.
+    """
+
+    return [name]
 
 
 class MutableContext(ContextProvider):
@@ -94,38 +102,13 @@ class MutableContext(ContextProvider):
     self.macros = {}
 
   def __setitem__(self, name, value):
-    if isinstance(value, str):
-      value = parse(value, self)
-    elif not isinstance(value, ExpressionNode):
-      message = 'value must be str or ExpressionNode'
-      raise TypeError(message, type(value))
-    # Make sure the macro does not contain a reference to itself.
-    # It will be resolved by expanding the original value immediately
-    # in the expression hierarchy.
-    old_value = self.macros.get(name) or TextNode('')
-    for ref_name in self.get_aliases(name):
-      value = value.substitute(ref_name, old_value)
-    self.macros[name] = value
+    self.macros[name] = parse_and_resolve(name, value, self)
 
   def __delitem__(self, name):
     try:
       del self.macros[name]
     except KeyError:
       pass
-
-  def get_aliases(self, name):
-    """
-    This function can be implemented by subclasses to specify under
-    what aliases the same macro can be found. The default implementation
-    simply returns *name*.
-
-    Args:
-      name (str): The name that was passed to :meth:`__setitem__`.
-    Returns:
-      list of str: A list of aliases.
-    """
-
-    return [name]
 
   def function(self, func):
     """
@@ -139,11 +122,11 @@ class MutableContext(ContextProvider):
   def has_macro(self, name):
     return name in self.macros
 
-  def get_macro(self, name, default=NotImplemented):
+  def get_macro(self, name):
+    if name == "0":
+      import pdb; pdb.set_trace()
     if name in self.macros:
       return self.macros[name]
-    elif default is not NotImplemented:
-      return default
     else:
       raise KeyError(name)
 
@@ -171,15 +154,13 @@ class ChainContext(ContextProvider):
         return True
     return False
 
-  def get_macro(self, name, default=NotImplemented):
+  def get_macro(self, name):
     for context in self.contexts:
       try:
         return context.get_macro(name)
       except KeyError:
         pass
-    if default is NotImplemented:
-      raise KeyError(name)
-    return default
+    raise KeyError(name)
 
   def get_namespace(self, name):
     for context in self.contexts:
@@ -215,14 +196,12 @@ class StackFrameContext(ContextProvider):
       return False
     return True
 
-  def get_macro(self, name, default=NotImplemented):
+  def get_macro(self, name):
     frame = self.frame
     if name in frame.f_locals:
       value = frame.f_locals[name]
     elif name in frame.f_globals:
       value = frame.f_globals[name]
-    elif default is not NotImplemented:
-      return default
     else:
       raise KeyError(name)
 
@@ -410,7 +389,7 @@ class VarNode(ExpressionNode):
       return node
     elif self.context():
       namespace = self.context().get_namespace()
-      if ref_name == creator.utils.create_var(namespace, self.varname):
+      if ref_name == creator.utils.create_var(namespace, self.varname, raise_=False):
         return node
     for i in range(len(self.args)):
       self.args[i] = self.args[i].substitute(ref_name, node)
@@ -576,6 +555,29 @@ class Parser(object):
 
 parser = Parser()
 parse = parser.parse
+
+
+def parse_and_resolve(name, value, context):
+  '''
+  Parses the specified *value* into a Macro and resolves self-references
+  with their original value from *context*.
+  '''
+
+  if isinstance(value, str):
+    value = parse(value, context)
+  elif not isinstance(value, ExpressionNode):
+    message = 'value must be str or ExpressionNode'
+    raise TypeError(message, type(value))
+  # Make sure the macro does not contain a reference to itself.
+  # It will be resolved by expanding the original value immediately
+  # in the expression hierarchy.
+  try:
+    old_value = context.get_macro(name)
+  except KeyError:
+    old_value = TextNode('')
+  for ref_name in context.get_aliases(name):
+    value = value.substitute(ref_name, old_value)
+  return value
 
 
 class Globals:
