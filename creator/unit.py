@@ -520,8 +520,9 @@ class Unit(object):
     """
 
     unit = self.load(identifier)
+    defaults = unit._create_scope()
     for key, value in list(unit.context.items()):
-      if key not in ('ProjectPath', 'self'):
+      if key not in ('ProjectPath', 'self') and key not in defaults:
         self.context.transition(key, value)
 
     for key, value in unit.aliases.items():
@@ -1025,7 +1026,7 @@ class BaseContext(creator.macro.ContextProvider):
     raise NotImplementedError
 
   @property
-  def workspace(self):
+  def parent(self):
     raise NotImplementedError
 
   def items(self):
@@ -1091,6 +1092,8 @@ class BaseContext(creator.macro.ContextProvider):
   def _automacro(self, value):
     if isinstance(value, creator.macro.ExpressionNode):
       return value
+    elif isinstance(value, (list, tuple)):
+      return creator.utils.join(map(str, value))
     else:
       return creator.macro.TextNode(str(value))
 
@@ -1142,12 +1145,30 @@ class WorkspaceContext(BaseContext):
   def items(self):
     return vars(self._workspace()).items()
 
+  def has_macro(self, name):
+    workspace = self._workspace()
+    if super().has_macro(name):
+      return True
+    namespace, name = creator.utils.parse_var(name)
+    if namespace:
+      try:
+        unit = workspace.get_unit(namespace)
+      except UnitNotFoundError:
+        return False
+      return unit.context.has_macro(name)
+    if not namespace and not name.startswith('_'):
+      return hasattr(creator.macro.Globals, name)
+    return False
+
   def get_macro(self, name):
+    workspace = self._workspace()
     try:
       return super().get_macro(name)
     except KeyError:
       pass
     namespace, name = creator.utils.parse_var(name)
+    if namespace:
+      return workspace.get_unit(namespace).context.get_macro(name)
     if not namespace and not name.startswith('_'):
       if hasattr(creator.macro.Globals, name):
         return getattr(creator.macro.Globals, name)

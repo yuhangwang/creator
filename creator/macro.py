@@ -381,6 +381,8 @@ class VarNode(ExpressionNode):
     try:
       macro = context.get_macro(self.varname)
     except KeyError:
+      if sub_args:
+        return '$({0} ...)'.format(self.varname)
       return ''
     return macro.eval(context, sub_args).strip()
 

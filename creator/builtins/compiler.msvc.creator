@@ -25,16 +25,16 @@ import re
 cc = 'cl /nologo'
 cpp = 'cl /nologo'
 ar = macro('lib /nologo /OUT:$(quote $0)')
-compileonly = '/c'
+c = '/c'
 wall = '/Wall'
 g = '/Zi /g'
 exceptions = '/EHsc'
 lnkflags = '/link'
 
-include = macro('$(quotesplit $(addprefix /I,$0))')
-define = macro('$(quotesplit $(addprefix /D,$0))')
-libpath = macro('$(quotesplit $(addprefix /LIBPATH:,$0))')
-lib = macro('$(quotesplit $(suffix $0,lib))')
+I = macro('$(quotesplit $(addprefix /I,$0))')
+D = macro('$(quotesplit $(addprefix /D,$0))')
+l = macro('$(quotesplit $(addprefix /LIBPATH:,$0))')
+L = macro('$(quotesplit $(suffix $0,lib))')
 
 objout = macro('/Fo$(quote $0)')
 binout = macro('/Fe$(quote $0)')
