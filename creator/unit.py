@@ -61,6 +61,10 @@ class Workspace(object):
     self.context = WorkspaceContext(self)
     self.units = {}
     self.statics = {}
+    self.G = type('WorkspaceGlobals', (), {})()
+    self.G.Platform = creator.platform.platform_name
+    self.G.PlatformStandard = creator.platform.platform_standard
+    self.G.Architecture = creator.platform.architecture
 
     # If the current user has a `.creator_profile` file in his
     # home directory, run that file.
@@ -207,7 +211,7 @@ class Workspace(object):
     # Transfer all macros that have been set to the unit before
     # it was loaded to the unit.
     identifier_prefix = identifier + ':'
-    for key, value in list(self.context.macros.items()):
+    for key, value in vars(self.G).items(): # list(self.context.macros.items()):
       if key.startswith(identifier_prefix):
         unit.context[key[len(identifier_prefix):]] = value
         del self.context.macros[key]
@@ -289,7 +293,8 @@ class Unit(object):
 
   def __init__(self, project_path, identifier, workspace):
     super().__init__()
-    self.scope = {}
+    self.G = type('UnitGlobals', (), {})()
+    self.scope = vars(self.G)
     self.project_path = project_path
     self.identifier = identifier
     self.workspace = workspace
@@ -308,8 +313,7 @@ class Unit(object):
     return {
       'unit': self,
       'workspace': self.workspace,
-      'C': self.context,
-      'G': self.workspace.context,
+      'G': self.workspace.G,
       'run_task': self.run_task,
       'append': self.append,
       'confirm': self.confirm,
@@ -1008,106 +1012,34 @@ class Task(BaseTarget):
     self._func = types.FunctionType(target._func.__code__, unit.scope)
 
 
-class WorkspaceContext(creator.macro.MutableContext):
-  """
-  This class implements the :class:`creator.macro.ContextProvider`
-  interface for the global macro context of a :class:`Workspace`.
-  """
-
-  def __init__(self, workspace):
-    super().__init__()
-    self._workspace = weakref.ref(workspace)
-    self['Platform'] = creator.macro.TextNode(creator.platform.platform_name)
-    self['PlatformStandard'] = creator.macro.TextNode(
-      creator.platform.platform_standard)
-    self['Architecture'] = creator.macro.TextNode(
-      creator.platform.architecture)
-
-  def __setitem__(self, name, value):
-    namespace, varname = creator.utils.parse_var(name)
-    if namespace is not None:
-      try:
-        unit = self.workspace.get_unit(namespace)
-        unit.context[varname] = value
-      except UnitNotFoundError:
-        pass
-    name = creator.utils.create_var(namespace or None, varname)
-    super().__setitem__(name, value)
-
-  @property
-  def workspace(self):
-    return self._workspace()
-
-  def has_macro(self, name):
-    try:
-      self.get_macro(name)
-    except KeyError:
-      return False
-    return True
-
-  def get_macro(self, name):
-    namespace, name = creator.utils.parse_var(name)
-    if namespace:
-      try:
-        unit = self.workspace.get_unit(namespace)
-        return unit.context.get_macro(name)
-      except UnitNotFoundError:
-        pass
-    name = creator.utils.create_var(namespace or None, name)
-    try:
-      macro = super().get_macro(name)
-      return macro
-    except KeyError:
-      pass
-    if not name.startswith('_') and hasattr(creator.macro.Globals, name):
-      return getattr(creator.macro.Globals, name)
-    if name in os.environ:
-      return creator.macro.TextNode(os.environ[name])
-    raise KeyError(name)
-
-  def get_namespace(self):
-    return ''
-
-
-class UnitContext(creator.macro.ContextProvider):
+class BaseContext(creator.macro.ContextProvider):
   """
   This class implements the :class:`creator.macro.ContextProvider`
   interface for the local macro context of a :class:`Unit`.
   """
 
-  def __init__(self, unit):
-    super().__init__()
-    self._unit = weakref.ref(unit)
-    self['self'] = creator.macro.TextNode(self.unit.identifier)
-    self['ProjectPath'] = creator.macro.TextNode(unit.project_path)
-
   @property
-  def unit(self):
-    return self._unit()
+  def scope(self):
+    raise NotImplementedError
 
   @property
   def workspace(self):
-    return self._unit().workspace
+    raise NotImplementedError
+
+  def items(self):
+    raise NotImplementedError
 
   def _prepare_name(self, name):
-    namespace, varname = creator.utils.parse_var(name)
-    if namespace in self.unit.aliases:
-      namespace = self.unit.aliases[namespace]
-    return namespace, varname
+    return creator.utils.parse_var(name)
 
   def __setitem__(self, name, value):
     namespace, name = self._prepare_name(name)
     if namespace is None or namespace == self.unit.identifier:
-      self.unit.scope[name] = value
+      self.scope[name] = value
+    elif self.parent:
+      self.parent[creator.utils.create_var(namespace, name)] = value
     else:
-      self.workspace.context[creator.utils.create_var(namespace, name)] = value
-
-  def items(self):
-    namespace = creator.utils.create_var(self.unit.identifier, '')
-    for key, value in self.workspace.context.macros.items():
-      if key.startswith(namespace):
-        key = key[len(namespace):]
-        yield (key, value)
+      raise RuntimeError('Well, that\'s strange.')
 
   def transition(self, key, value):
     '''
@@ -1122,33 +1054,102 @@ class UnitContext(creator.macro.ContextProvider):
 
   def has_macro(self, name):
     namespace, name = self._prepare_name(name)
-    if namespace is None and name in self.unit.scope:
+    if namespace is None and name in self.scope:
       return True
-    elif namespace == self.unit.identifier:
-      return name in self.unit.scope
-    else:
+    elif namespace == self.get_namespace():
+      return name in self.scope
+
+    parent = self.parent
+    if parent:
       full_name = creator.utils.create_var(namespace, name)
-      return self.workspace.context.has_macro(full_name)
+      return parent.has_macro(full_name)
+    return False
 
   def get_macro(self, name):
     namespace, name = self._prepare_name(name)
-    if namespace == self.unit.identifier:
-      value = self.unit.scope[name]
+    if namespace == self.get_namespace():
+      value = self.scope[name]
       return self._automacro(value)
     elif namespace is None:
       try:
-        value = self.unit.scope[name]
+        value = self.scope[name]
         return self._automacro(value)
       except KeyError:
         pass
-    full_name = creator.utils.create_var(namespace, name)
-    return self.workspace.context.get_macro(full_name)
+
+    parent = self.parent
+    if parent:
+      full_name = creator.utils.create_var(namespace, name)
+      return parent.get_macro(full_name)
+    raise KeyError(name)
 
   def get_namespace(self):
-    return self.unit.identifier
+    raise NotImplementedError
 
   def _automacro(self, value):
     if isinstance(value, creator.macro.ExpressionNode):
       return value
     else:
       return creator.macro.TextNode(str(value))
+
+
+class UnitContext(BaseContext):
+
+  def __init__(self, unit):
+    super().__init__()
+    self._unit = weakref.ref(unit)
+    self['self'] = creator.macro.TextNode(unit.identifier)
+    self['ProjectPath'] = creator.macro.TextNode(unit.project_path)
+
+  def _prepare_name(self, name):
+    unit = self._unit()
+    namespace, varname = creator.utils.parse_var(name)
+    if namespace in unit.aliases:
+      namespace = unit.aliases[namespace]
+    return namespace, varname
+
+  @property
+  def parent(self):
+    return self._unit().workspace.context
+
+  @property
+  def scope(self):
+    return self._unit().scope
+
+  def items(self):
+    return vars(self._unit().G).items()
+
+  def get_namespace(self):
+    return self._unit().identifier
+
+
+class WorkspaceContext(BaseContext):
+
+  def __init__(self, workspace):
+    super().__init__()
+    self._workspace = weakref.ref(workspace)
+
+  @property
+  def parent(self):
+    return None
+
+  @property
+  def scope(self):
+    return vars(self._workspace().G)
+
+  def items(self):
+    return vars(self._workspace()).items()
+
+  def get_macro(self, name):
+    try:
+      return super().get_macro(name)
+    except KeyError:
+      pass
+    namespace, name = creator.utils.parse_var(name)
+    if not namespace and not name.startswith('_'):
+      if hasattr(creator.macro.Globals, name):
+        return getattr(creator.macro.Globals, name)
+    raise KeyError(name)
+
+  def get_namespace(self):
+    return ''
