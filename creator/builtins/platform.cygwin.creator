@@ -22,7 +22,7 @@
 
 extends('platform.nt')
 
-define('objp', '')
-define('objs', 'o')
-define('libp', 'lib')
-define('libs', 'a')
+objp = ''
+objs = 'o'
+libp = 'lib'
+libs = 'a'

@@ -22,30 +22,30 @@
 
 import re
 
-define('cc', 'cl /nologo')
-define('cpp', 'cl /nologo')
-define('ar', 'lib /nologo /OUT:$(quote $0)')
-define('compileonly', '/c')
-define('wall', '/Wall')
-define('g', '/Zi /g')
-define('exceptions', '/EHsc')
-define('lnkflags', '/link')
+cc = 'cl /nologo'
+cpp = 'cl /nologo'
+ar = macro('lib /nologo /OUT:$(quote $0)')
+compileonly = '/c'
+wall = '/Wall'
+g = '/Zi /g'
+exceptions = '/EHsc'
+lnkflags = '/link'
 
-define('include', '$(quotesplit $(addprefix /I,$0))')
-define('define', '$(quotesplit $(addprefix /D,$0))')
-define('libpath', '$(quotesplit $(addprefix /LIBPATH:,$0))')
-define('lib', '$(quotesplit $(suffix $0,lib))')
+include = macro('$(quotesplit $(addprefix /I,$0))')
+define = macro('$(quotesplit $(addprefix /D,$0))')
+libpath = macro('$(quotesplit $(addprefix /LIBPATH:,$0))')
+lib = macro('$(quotesplit $(suffix $0,lib))')
 
-define('objout', '/Fo$(quote $0)')
-define('binout', '/Fe$(quote $0)')
+objout = macro('/Fo$(quote $0)')
+binout = macro('/Fe$(quote $0)')
 
-define('O0', '')
-define('O1', '/O1')
-define('O2', '/O2')
-define('O3', '/O2')  # O3 not supported
-define('Os', '/Os')
-define('Ofast', '/Ot')
-define('Og', '/Od')
+O0 = ''
+O1 = '/O1'
+O2 = '/O2'
+O3 = '/O2'  # O3 not supported
+Os = '/Os'
+Ofast = '/Ot'
+Og = '/Od'
 
 # Detect the Platform Toolset Version and Target Architecture.
 try:
@@ -59,6 +59,6 @@ except ExitCodeError:
 else:
   match = re.match('Microsoft.*Compiler\s+Version\s+([\d\.]+).*(x86|x64)', line, re.I)
   if match:
-    define('Detected', 'true')
-    define('Version', match.group(1))
-    define('Arch', match.group(2))
+    Detected = 'true'
+    Version = match.group(1)
+    Arch = match.group(2)

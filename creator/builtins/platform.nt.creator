@@ -20,18 +20,18 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-define('binp', '')
-define('bins', 'exe')
-define('bin', '$(prefix $(suffix $0,$bins),$binp)')
+binp = ''
+bins = 'exe'
+bin = macro('$(prefix $(suffix $0,$bins),$binp)')
 
-define('objp', '')
-define('objs', 'obj')
-define('obj', '$(prefix $(suffix $0,$objs),$objp)')
+objp = ''
+objs = 'obj'
+obj = macro('$(prefix $(suffix $0,$objs),$objp)')
 
-define('libp', '')
-define('libs', 'lib')
-define('lib', '$(prefix $(suffix $0,$libs),$libp)')
+libp = ''
+libs = 'lib'
+lib = macro('$(prefix $(suffix $0,$libs),$libp)')
 
-define('dllp', '')
-define('dlls', 'dll')
-define('dll', '$(prefix $(suffix $0,$dlls),$dllp)')
+dllp = ''
+dlls = 'dll'
+dll = macro('$(prefix $(suffix $0,$dlls),$dllp)')

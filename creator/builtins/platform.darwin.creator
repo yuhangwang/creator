@@ -22,5 +22,5 @@
 
 extends('platform.linux')
 
-define('dllp', '')
-define('dlls', 'dylib')
+dllp = ''
+dlls = 'dylib'

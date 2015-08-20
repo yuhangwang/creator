@@ -20,19 +20,17 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-platform = eval('$Platform')
-standard = eval('$PlatformStandard')
 if defined('creator.compiler'):
   load_name = eval('compiler.$creator.compiler')
-elif platform == 'Windows':
+elif G.Platform == 'Windows':
   load_name = 'compiler.msvc'
-elif platform == 'Cygwin':
+elif G.Platform == 'Cygwin':
   load_name = 'compiler.gcc'
-elif platform == 'Linux':
+elif G.Platform == 'Linux':
   load_name = 'compiler.gcc'
-elif platform == 'Darwin':
+elif G.Platform == 'Darwin':
   load_name = 'compiler.clang'
 else:
-  raise EnvironmentError('unsupported platform "{0}"'.format(platform))
+  raise EnvironmentError('unsupported platform "{0}"'.format(G.Platform))
 
 extends(load_name)

@@ -20,27 +20,27 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-define('cc', 'gcc')
-define('cpp', 'g++')
-define('ar', 'ar rcs $(quote $0)')
-define('compileonly', '-c')
-define('wall', '-Wall')
-define('cpp11', '-std=c++11')
-define('g', '-g')
-define('no_exceptions', '-fno-exceptions')
+cc = 'gcc'
+cpp = 'g++'
+ar = macro('ar rcs $(quote $0)')
+compileonly = '-c'
+wall = '-Wall'
+cpp11 = '-std=c++11'
+g = '-g'
+no_exceptions = '-fno-exceptions'
 
-define('include', '$(quotesplit $(addprefix -I,$0))')
-define('define', '$(quotesplit $(addprefix -D,$0))')
-define('lib', '$(quotesplit $(addprefix -l,$0))')
-define('libpath', '$(quotesplit $(addprefix -L,$0))')
+include = macro('$(quotesplit $(addprefix -I,$0))')
+define = macro('$(quotesplit $(addprefix -D,$0))')
+lib = macro('$(quotesplit $(addprefix -l,$0))')
+libpath = macro('$(quotesplit $(addprefix -L,$0))')
 
-define('objout', '-o $(quote $0)')
-define('binout', '-o $(quote $0)')
+objout = macro('-o $(quote $0)')
+binout = macro('-o $(quote $0)')
 
-define('O0', '-O0')
-define('O1', '-O1')
-define('O2', '-O2')
-define('O3', '-O3')
-define('Os', '-Os')
-define('Ofast', '-Ofast')
-define('Og', '-Og')
+O0 = '-O0'
+O1 = '-O1'
+O2 = '-O2'
+O3 = '-O3'
+Os = '-Os'
+Ofast = '-Ofast'
+Og = '-Og'

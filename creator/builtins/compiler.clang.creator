@@ -22,5 +22,5 @@
 
 extends('compiler.gcc')
 
-define('cc', 'clang')
-define('cpp', 'clang++')
+cc = 'clang'
+ccp = 'clang++'

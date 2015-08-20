@@ -322,6 +322,7 @@ class Unit(object):
       'e': self.eval,
       'eq': self.eq,
       'error': self.error,
+      'macro': self.macro,
       'ne': self.ne,
       'eval': self.eval,
       'exit': sys.exit,
@@ -535,7 +536,7 @@ class Unit(object):
       # Replace abstract dependencies with the non-abstract clones.
       for target in self.targets.values():
         for index, dep in enumerate(target.dependencies):
-          for name, ref in unit.target.items():
+          for name, ref in unit.targets.items():
             if ref.abstract and ref is dep:
               dep = target.dependencies[index] = self.targets[name]
 
@@ -920,7 +921,8 @@ class Target(BaseTarget):
 
     if each:
       if len(input_files) != len(output_files):
-        raise ValueError('input file count must match output file count')
+        raise ValueError('input file count must match output file count',
+          input_files, output_files)
       for fin, fout in zip(input_files, output_files):
         context['<'] = raw(fin)
         context['@'] = raw(fout)
@@ -1034,7 +1036,7 @@ class BaseContext(creator.macro.ContextProvider):
 
   def __setitem__(self, name, value):
     namespace, name = self._prepare_name(name)
-    if namespace is None or namespace == self.unit.identifier:
+    if namespace is None or namespace == self.get_namespace():
       self.scope[name] = value
     elif self.parent:
       self.parent[creator.utils.create_var(namespace, name)] = value
