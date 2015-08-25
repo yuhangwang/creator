@@ -505,7 +505,7 @@ class Unit(object):
       # Replace abstract dependencies with the non-abstract clones.
       for target in self.targets.values():
         for index, dep in enumerate(target.dependencies):
-          for name, ref in unit.target.items():
+          for name, ref in unit.targets.items():
             if ref.abstract and ref is dep:
               dep = target.dependencies[index] = self.targets[name]
 
@@ -924,7 +924,12 @@ class Target(BaseTarget):
 
   def _copy_from(self, target, unit):
     super(Target, self)._copy_from(target, unit)
-    self.command_data = []
+    self.inputs = target.inputs
+    self.outputs = target.outputs
+    self.command = target.command
+    self.for_each = target.for_each
+    self.auxiliary = list(target.auxiliary)
+    self.command_data = None
 
 
 class Task(BaseTarget):
