@@ -75,16 +75,23 @@ define('Sources', '$(wildcard $ProjectPath/src/*.cpp)')
 define('Objects', '$(p:obj $(move $Sources, $ProjectPath/src, $BuildDir/obj))')
 define('Program', '$(p:bin $BuildDir/main)')
 
-@target()
-def objects():
-  objects.build_each(
-    '$Sources', '$Objects', '$c:cpp $c:compileonly $(c:objout $@) $(quote $<)')
+target(
+  name='objects',
+  inputs='$Sources',
+  outputs='$Objects',
+  command='$c:cpp $c:compileonly $(c:objout $@) $(quote $<)',
+  for_each=True,
+)
 
-@target(objects)
-def program():
-  program.build('$Objects', '$Program', '$c:cpp $(c:binout $@) $(quotesplit $<)')
+target(
+  name='program',
+  requires='objects',
+  inputs='$Objects',
+  outputs='$Program',
+  command='$c:cpp $(c:binout $@) $(quotesplit $<)',
+)
 
-@task(program)
+@task(requires='program')
 def run():
   shell('$(quote $Program)')
 ```

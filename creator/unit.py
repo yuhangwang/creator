@@ -624,7 +624,7 @@ class Unit(object):
     self.targets[name] = target
     return target
 
-  def task(self, requires=(), abstract=False):
+  def task(self, requires=None, abstract=False):
     """
     Wraps a Python function as a task which can be invoked by the
     command-line or required by another task. _\*requirements_ must be
@@ -642,6 +642,11 @@ class Unit(object):
     Returns:
       callable: A decorator for a function that returns a :class:`Task`.
     """
+
+    if requires is None:
+      requires = []
+    elif not isinstance(requires, (list, tuple)):
+      requires = [requires]
 
     for item in requires:
       if not isinstance(item, str) and not isinstance(item, BaseTarget):
