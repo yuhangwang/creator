@@ -586,41 +586,45 @@ class Unit(object):
       command = shlex.split(command)
     return creator.utils.ShellCall(command, shell=shell, cwd=cwd)
 
-  def target(self, *requirements, abstract=False):
-    """
-    Wraps a Python function to be treated as a target to declare the
-    build definitions. _\*requirements_ must be passed zero or more
-    requirements that are to be built before the actual target is.
+  def target(self, name, inputs, outputs, command, requires=None,
+    for_each=False, abstract=False):
+    '''
+    Declares a buildable target. Requires a name, inputs and outputs,
+    the command which is used to build the outputs and optionally a
+    number of dependent targets.
 
-    Requirements for targets may only be targets, not tasks.
+    .. code-block:: python
 
-    Arguments:
-      \*requirements (str or BaseTarget)
-      abstract (bool): Pass True to mark this as an abstract target.
-        Abstract targets are ignored when exporting to a Ninja file
-        but can be inherited when using :meth:`extends`.
+        target(
+          name='bin',
+          requires=['obj'],
+          inputs='$Objects',
+          outputs='$Binary',
+          command='$c:cc $!< $(c:binout $@)',
+        )
+    '''
 
-    Returns:
-      callable: A decorator for a function that returns a :class:`Target`.
-    """
+    if name in self.targets:
+      raise ValueError('target name already reserved', name)
 
-    for item in requirements:
-      if not isinstance(item, str) and not isinstance(item, BaseTarget):
-        raise TypeError('requirement must be str or BaseTarget', type(item))
+    if requires is None:
+      requires = []
+    elif not isinstance(requires, (list, tuple)):
+      requires = [requires]
 
-    def decorator(func):
-      if not callable(func):
-        raise TypeError('func must be callable', type(func))
-      if func.__name__ in self.targets:
-        raise ValueError('target "{0}" already exists'.format(func.__name__))
-      target = Target(self, func.__name__, None, func, abstract=abstract)
-      [target.requires(req) for req in requirements]
-      self.targets[func.__name__] = target
-      return target
+    target = Target(self, name, abstract=abstract)
+    target.inputs = inputs
+    target.outputs = outputs
+    target.command = command
+    target.for_each = for_each
 
-    return decorator
+    for item in requires:
+      target.requires(item)
 
-  def task(self, *requirements, abstract=False):
+    self.targets[name] = target
+    return target
+
+  def task(self, requires=(), abstract=False):
     """
     Wraps a Python function as a task which can be invoked by the
     command-line or required by another task. _\*requirements_ must be
@@ -630,7 +634,7 @@ class Unit(object):
     Requirements may be targets or tasks.
 
     Arguments:
-      \*requirements (str or BaseTarget)
+      requires (str or BaseTarget, list of str or BaseTarget)
       abstract (bool): Pass True to mark this as an abstract target.
         Abstract targets are ignored when exporting to a Ninja file
         but can be inherited when using :meth:`extends`.
@@ -639,7 +643,7 @@ class Unit(object):
       callable: A decorator for a function that returns a :class:`Task`.
     """
 
-    for item in requirements:
+    for item in requires:
       if not isinstance(item, str) and not isinstance(item, BaseTarget):
         raise TypeError('requirement must be str or BaseTarget', type(item))
 
@@ -648,8 +652,8 @@ class Unit(object):
         raise TypeError('func must be callable', type(func))
       if func.__name__ in self.targets:
         raise ValueError('task name already reserved', func.__name__)
-      task = Task(func, self, func.__name__, None, abstract=abstract)
-      [task.requires(req) for req in requirements]
+      task = Task(self, func.__name__, func, abstract=abstract)
+      [task.requires(req) for req in requires]
       self.targets[func.__name__] = task
       return func
 
@@ -668,8 +672,6 @@ class BaseTarget(object):
     identifier (str): The identifier of the target, which is the
       units identifier and the targets name concatenated.
     is_setup (bool): True if the target is set-up, False if not.
-    on_setup (callable)
-    initalizer (callable)
     listeners (list of callable): A list of functions listening to
       certain events of the target. The functions are invoked with
       the three arguments ``(target, event, data)``.
@@ -679,25 +681,19 @@ class BaseTarget(object):
       no data for this event.
   '''
 
-  def __init__(self, unit, name, initalizer=None, on_setup=None, abstract=False):
+  def __init__(self, unit, name, abstract=False):
     if not isinstance(unit, creator.unit.Unit):
       raise TypeError('unit must be creator.unit.Unit', type(unit))
     if not isinstance(name, str):
       raise TypeError('name must be str', type(name))
     if not creator.utils.validate_identifier(name):
       raise ValueError('name is not a valid identifier', name)
-    if initalizer is not None and not callable(initalizer):
-      raise TypeError('initalizer must be None or callable')
-    if on_setup is not None and not callable(on_setup):
-      raise TypeError('on_setup must be None or callable')
     super().__init__()
     self._unit = weakref.ref(unit)
     self._name = name
     self.dependencies = []
     self.listeners = []
     self.is_setup = False
-    self.initalizer = initalizer
-    self.on_setup = on_setup
     self.abstract = abstract
 
   @property
@@ -759,16 +755,8 @@ class BaseTarget(object):
     if self.is_setup:
       raise RuntimeError('target "{0}" is already set-up'.format(self.identifier))
     self.is_setup = True
-
     for listener in self.listeners:
       listener(self, 'do_setup', None)
-
-    if self.initalizer is not None:
-      self.initalizer()
-    if self.on_setup is not None:
-      self.on_setup()
-
-    return True
 
   def copy(self, unit):
     '''
@@ -788,20 +776,11 @@ class BaseTarget(object):
     new *unit* instead of the *target*s old unit.
     '''
 
-    if target.on_setup:
-      func = target.on_setup
-      on_setup = types.FunctionType(func.__code__, unit.scope,
-        name=func.__name__, argdefs=func.__defaults__, closure=func.__closure__)
-    else:
-      on_setup = None
-
     self._unit = weakref.ref(unit)
     self._name = target.name
     self.dependencies = list(target.dependencies)
     self.listeners = list(target.listeners)
     self.is_setup = False
-    self.initalizer = target.initalizer
-    self.on_setup = on_setup
     self.abstract = target.abstract
     unit.scope[self._name] = self
 
@@ -817,9 +796,13 @@ class Target(BaseTarget):
   be completely filled with all data.
 
   Attributes:
-    command_data (list of dict): A list of build commands. Each entry
-      is a dictionary with the keys ``'inputs', 'outputs', 'command',
-      'auxiliary'``.
+    inputs (str)
+    outputs (str)
+    command (str)
+    auxiliary (list of str): A list of additional files required as
+      input files for building the target (eg. header files).
+    command_data (list of dicts, None): A dictionary that contains the final
+      data, evaluated when the target is setup.
 
   Listener Events:
     - ``'build'``: Sent when :meth:`build` is called. The data for
@@ -830,90 +813,67 @@ class Target(BaseTarget):
         dependencies.
   """
 
-  def __init__(self, *args, **kwargs):
-    super().__init__(*args, **kwargs)
-    self.command_data = []
+  def __init__(self, unit, name, abstract=False):
+    super().__init__(unit, name, abstract)
+    self.inputs = None
+    self.outputs = None
+    self.command = None
+    self.for_each = False
+    self.auxiliary = []
+    self.command_data = None
 
   def acccept_requirement(self, target):
     if not isinstance(target, Target):
       raise TypeError('can only depend on targets')
 
-  def add(self, *args, **kwargs):
-    warnings.warn("Target.add() is deprecated, use "
-      "Target.build() instead", DeprecationWarning)
-    return self.build(*args, **kwargs)
+  def do_setup(self):
+    for listeners in self.listeners:
+      listeners(self, 'build', None)
+    if not isinstance(self.inputs, str):
+      raise TypeError('Target.inputs must be str', type(self.inputs))
+    if not isinstance(self.outputs, str):
+      raise TypeError('Target.outputs must be str', type(self.outputs))
+    if not isinstance(self.command, str):
+      raise TypeError('Target.command must be str', type(self.command))
 
-  def build(self, inputs, outputs, command, each=False):
-    """
-    Associated the *inputs* with the *outputs* being built by the
-    specified *\*commands*. All parameters passed to this function must
-    be strings that are automatically and instantly evaluated as macros.
+    super().do_setup()
+    self.command_data = []
 
-    The data will be appended to :attr:`command_data` in the form of
-    a dictionary with the following keys:
+    inputs = creator.utils.split(self.unit.eval(self.inputs))
+    inputs = [creator.utils.normpath(f) for f in inputs]
 
-    - ``'inputs'``: A list of input files.
-    - ``'outputs'``: A list of output files.
-    - ``'command'``: A command to produce the output files.
-
-    Args:
-      inputs (str): A listing of the input files.
-      outputs (str): A listing of the output files.
-      command (str): A command to build the outputs from the inputs. The
-        special variables `$<` and `$@` represent the input and output.
-        The variables `$in` and `$out` will automatically be escaped so
-        they will be exported to the ninja rule.
-      each (bool): If True, the files will be built each on its own,
-        but it expects the caller to use the ``$in`` and ``$out`` macros.
-    """
-
-    # Invoke the listeners and allow them to modify the input data.
-    # Eg. a plugin could add the header files that are required for
-    # the build to the input files.
-    data = {
-      'inputs': inputs, 'outputs': outputs,
-      'command': command, 'auxiliary': [], 'each': each,
-    }
-    del inputs, outputs, command
-    for listener in self.listeners:
-      listener(self, 'build', data)
-
-    # Evaluate and split the input files into a list.
-    input_files = creator.utils.split(self.unit.eval(data['inputs']))
-    input_files = [creator.utils.normpath(f) for f in input_files]
-
-    # Evaluate and split the output files into a list.
-    output_files = creator.utils.split(self.unit.eval(data['outputs']))
-    output_files = [creator.utils.normpath(f) for f in output_files]
+    outputs = creator.utils.split(self.unit.eval(self.outputs))
+    outputs = [creator.utils.normpath(f) for f in outputs]
 
     context = creator.macro.MutableContext()
 
-    if each:
-      if len(input_files) != len(output_files):
+    if self.for_each:
+      if len(inputs) != len(outputs):
         raise ValueError('input file count must match output file count')
-      for fin, fout in zip(input_files, output_files):
+      for fin, fout in zip(inputs, outputs):
         context['<'] = raw(fin)
         context['@'] = raw(fout)
-        command = self.unit.eval(data['command'], context)
+        command = self.unit.eval(self.command, context)
         self.command_data.append({
           'inputs': [fin],
           'outputs': [fout],
-          'auxiliary': data['auxiliary'],
           'command': command,
         })
     else:
-      context['<'] = raw(creator.utils.join(input_files))
-      context['@'] = raw(creator.utils.join(output_files))
-      command = self.unit.eval(data['command'], context)
+      context['<'] = raw(creator.utils.join(inputs))
+      context['@'] = raw(creator.utils.join(outputs))
+      command = self.unit.eval(self.command, context)
       self.command_data.append({
-        'inputs': input_files,
-        'outputs': output_files,
-        'auxiliary': data['auxiliary'],
+        'inputs': inputs,
+        'outputs': outputs,
         'command': command,
       })
 
-  def build_each(self, inputs, outputs, command):
-    return self.build(inputs, outputs, command, each=True)
+  def build(self, *args, **kwargs):
+    raise DeprecationWarning('Target.build() no longer supported')
+
+  def build_each(self, *args, **kwargs):
+    raise DeprecationWarning('Target.build_each() no longer supported')
 
   def export(self, writer):
     """
@@ -949,7 +909,7 @@ class Target(BaseTarget):
       writer.rule(rule_name, entry['command'])
 
       assert len(entry['outputs']) != 0
-      inputs = list(entry['inputs']) + infiles + entry['auxiliary']
+      inputs = list(entry['inputs']) + infiles + self.auxiliary
       writer.build(entry['outputs'], rule_name, inputs)
 
       writer.newline()
@@ -967,10 +927,10 @@ class Task(BaseTarget):
   Represents a task-target that is run from Python.
   """
 
-  def __init__(self, task_func, *args, **kwargs):
+  def __init__(self, unit, name, task_func, abstract=False):
     if not callable(task_func):
       raise TypeError('task_func must be callable', type(task_func))
-    super().__init__(*args, **kwargs)
+    super().__init__(unit, name, abstract)
     self._func = task_func
 
   @property
